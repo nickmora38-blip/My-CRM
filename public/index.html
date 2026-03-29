@@ -1,0 +1,521 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>My CRM — Manufactured Homes Management</title>
+  <link rel="stylesheet" href="/css/style.css" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet" />
+</head>
+<body>
+
+<!-- ═══════════════════════════════════════════════════════
+     NOTIFICATION CONTAINER
+═══════════════════════════════════════════════════════ -->
+<div id="notification-container"></div>
+
+<!-- ═══════════════════════════════════════════════════════
+     LOGIN SCREEN
+═══════════════════════════════════════════════════════ -->
+<div id="login-screen" class="hidden">
+  <div class="login-card">
+    <div class="login-logo">
+      <h1>🏠 My CRM</h1>
+      <p>Manufactured Homes Management</p>
+    </div>
+    <form id="login-form">
+      <div class="form-group">
+        <label class="form-label" for="login-name">Your Name <span class="required">*</span></label>
+        <input type="text" id="login-name" class="form-control" placeholder="e.g. Jane Smith" required />
+      </div>
+      <div class="form-group">
+        <label class="form-label" for="login-email">Email Address</label>
+        <input type="email" id="login-email" class="form-control" placeholder="you@company.com" />
+      </div>
+      <button type="submit" class="btn btn-primary w-full btn-lg" style="margin-top:8px">
+        Sign In →
+      </button>
+    </form>
+    <p style="margin-top:16px;font-size:12px;color:var(--gray-400);text-align:center">
+      Data is stored locally in your browser.
+    </p>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════════════════════
+     MAIN APP
+═══════════════════════════════════════════════════════ -->
+<div id="app" class="hidden">
+
+  <!-- ── Sidebar ──────────────────────────────────────────── -->
+  <nav class="sidebar">
+    <div class="sidebar-header">
+      <h2>🏠 My CRM</h2>
+      <p id="user-display-name">User</p>
+    </div>
+
+    <div class="sidebar-nav">
+      <div class="nav-section-label">Main</div>
+      <div class="nav-item active" data-page="dashboard">
+        <span class="nav-icon">📊</span> Dashboard
+      </div>
+      <div class="nav-item" data-page="leads">
+        <span class="nav-icon">👥</span> Leads
+      </div>
+
+      <div class="nav-section-label" style="margin-top:8px">Tasks & Email</div>
+      <div class="nav-item" data-page="tasks">
+        <span class="nav-icon">📞</span> Call Tasks
+        <span class="nav-badge tasks-badge hidden">0</span>
+      </div>
+      <div class="nav-item" data-page="email">
+        <span class="nav-icon">📧</span> Email Templates
+      </div>
+
+      <div class="nav-section-label" style="margin-top:8px">Account</div>
+      <div class="nav-item" data-page="settings">
+        <span class="nav-icon">⚙️</span> Settings
+      </div>
+    </div>
+
+    <div class="sidebar-footer">
+      <div class="nav-item" onclick="logout()" style="color:var(--gray-400)">
+        <span class="nav-icon">🚪</span> Sign Out
+      </div>
+    </div>
+  </nav>
+
+  <!-- ── Main Content ──────────────────────────────────────── -->
+  <div class="main-content">
+
+    <!-- Top bar -->
+    <div class="topbar">
+      <div class="topbar-title" id="topbar-title">Dashboard</div>
+      <div class="topbar-actions">
+        <button class="btn btn-primary btn-sm" onclick="openLeadModal(null)">
+          ➕ Add Lead
+        </button>
+      </div>
+    </div>
+
+    <!-- Page Content -->
+    <div class="page-content">
+
+      <!-- ════════════════════════════════════════
+           PAGE: DASHBOARD
+      ════════════════════════════════════════ -->
+      <div class="page active" id="page-dashboard">
+
+        <!-- Stats row -->
+        <div class="stat-grid" id="dash-stats"></div>
+
+        <!-- Two-column grid -->
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:20px;flex-wrap:wrap">
+
+          <!-- Recent Leads -->
+          <div class="table-wrapper">
+            <div class="table-header">
+              <h3>Recent Leads</h3>
+              <button class="btn btn-outline btn-sm" onclick="navigateTo('leads')">View All →</button>
+            </div>
+            <div id="dash-recent-leads"></div>
+          </div>
+
+          <!-- Upcoming Tasks -->
+          <div class="card">
+            <div class="flex items-center justify-between mb-4">
+              <h3 style="font-size:15px;font-weight:600">Upcoming Calls</h3>
+              <button class="btn btn-outline btn-sm" onclick="navigateTo('tasks')">View All →</button>
+            </div>
+            <div id="dash-upcoming-tasks"></div>
+          </div>
+
+        </div>
+      </div>
+
+      <!-- ════════════════════════════════════════
+           PAGE: LEADS
+      ════════════════════════════════════════ -->
+      <div class="page" id="page-leads">
+        <div class="table-wrapper">
+          <div class="table-header">
+            <div class="flex items-center gap-3">
+              <h3>Leads</h3>
+              <span id="leads-count" class="badge badge-gray">0 leads</span>
+            </div>
+            <div class="table-filters">
+              <!-- Search -->
+              <div class="search-bar">
+                <span class="search-icon">🔍</span>
+                <input type="text" id="leads-search" placeholder="Search leads…" />
+              </div>
+
+              <!-- Response filter -->
+              <select id="filter-response" class="form-control" style="width:auto;padding:7px 12px">
+                <option value="">All Responses</option>
+                <option value="answered">✅ Answered</option>
+                <option value="no_answer">📵 No Answer</option>
+                <option value="text">💬 Text</option>
+              </select>
+
+              <!-- Status filter -->
+              <select id="filter-status" class="form-control" style="width:auto;padding:7px 12px">
+                <option value="">All Statuses</option>
+                <option value="active">🟢 Active</option>
+                <option value="not_active">⚫ Not Active</option>
+                <option value="dead">💀 Dead</option>
+                <option value="lost">🔴 Lost</option>
+                <option value="long_term">⏳ Long Term</option>
+              </select>
+
+              <button class="btn btn-primary btn-sm" onclick="openLeadModal(null)">➕ Add Lead</button>
+            </div>
+          </div>
+          <div id="leads-table-body"></div>
+        </div>
+      </div>
+
+      <!-- ════════════════════════════════════════
+           PAGE: TASKS
+      ════════════════════════════════════════ -->
+      <div class="page" id="page-tasks">
+
+        <div class="card" style="margin-bottom:16px">
+          <div class="schedule-info-box">
+            <strong>📅 Auto-Schedule:</strong>
+            Call tasks are automatically created for leads with <strong>No Answer</strong> or <strong>Text</strong> response status.
+            Tasks recur every <strong>4 hours</strong> during <strong>8am–7pm, Monday–Saturday</strong>.
+            Tasks stop when the lead response is changed to <strong>Answered</strong> or status to <strong>Active</strong>.
+          </div>
+        </div>
+
+        <!-- Tab nav -->
+        <div class="tab-nav">
+          <button class="tab-btn task-tab-btn active" data-filter="pending">Pending</button>
+          <button class="tab-btn task-tab-btn" data-filter="overdue">Overdue</button>
+          <button class="tab-btn task-tab-btn" data-filter="completed">Completed</button>
+          <button class="tab-btn task-tab-btn" data-filter="">All</button>
+        </div>
+
+        <div id="tasks-list"></div>
+      </div>
+
+      <!-- ════════════════════════════════════════
+           PAGE: EMAIL TEMPLATES
+      ════════════════════════════════════════ -->
+      <div class="page" id="page-email">
+
+        <div class="flex items-center justify-between mb-4">
+          <div>
+            <h2 style="font-size:18px;font-weight:700">Email Templates</h2>
+            <p class="text-muted text-sm mt-1">Create, edit and auto-send email templates to your leads.</p>
+          </div>
+          <button class="btn btn-primary btn-sm" onclick="openTemplateModal(null)">➕ New Template</button>
+        </div>
+
+        <div class="card" style="margin-bottom:20px">
+          <div style="font-size:13px;color:var(--gray-600)">
+            <strong>Variables you can use:</strong>
+            <span class="tag">{lead_name}</span>
+            <span class="tag">{company}</span>
+            <span class="tag">{phone}</span>
+            <span class="tag">{email}</span>
+          </div>
+          <div style="font-size:12px;color:var(--gray-500);margin-top:8px">
+            📬 <strong>Auto-send:</strong> Templates with trigger "No Answer" are automatically sent when a new lead is added with "No Answer" status.
+            Templates with trigger "Active" are sent when a lead's status is changed to Active.
+          </div>
+        </div>
+
+        <div id="email-template-cards"></div>
+
+        <!-- Email Log -->
+        <div class="flex items-center justify-between mt-4 mb-2">
+          <h3 style="font-size:15px;font-weight:600">Email Log (All Leads)</h3>
+        </div>
+        <div class="card">
+          <div id="email-log-all"></div>
+        </div>
+      </div>
+
+      <!-- ════════════════════════════════════════
+           PAGE: SETTINGS
+      ════════════════════════════════════════ -->
+      <div class="page" id="page-settings">
+        <div class="card" style="max-width:480px">
+          <h2 style="font-size:16px;font-weight:700;margin-bottom:20px">My Profile</h2>
+          <div class="form-group">
+            <label class="form-label" for="settings-name">Name <span class="required">*</span></label>
+            <input type="text" id="settings-name" class="form-control" />
+          </div>
+          <div class="form-group">
+            <label class="form-label" for="settings-email">Email</label>
+            <input type="email" id="settings-email" class="form-control" />
+          </div>
+          <button class="btn btn-primary" id="settings-save-btn">Save Changes</button>
+        </div>
+
+        <div class="card" style="max-width:480px;margin-top:16px">
+          <h2 style="font-size:16px;font-weight:700;margin-bottom:12px">Danger Zone</h2>
+          <p class="text-sm text-muted mb-4">Clear all CRM data from this browser.</p>
+          <button class="btn btn-danger btn-sm" onclick="if(confirm('Clear ALL data? This cannot be undone.')){localStorage.clear();location.reload()}">🗑️ Clear All Data</button>
+        </div>
+      </div>
+
+    </div><!-- /page-content -->
+  </div><!-- /main-content -->
+</div><!-- /app -->
+
+
+<!-- ═══════════════════════════════════════════════════════
+     MODAL: ADD / EDIT LEAD
+═══════════════════════════════════════════════════════ -->
+<div id="lead-modal" class="modal-overlay hidden">
+  <div class="modal modal-lg">
+    <div class="modal-header">
+      <div>
+        <div class="modal-title" id="lead-modal-title">Add New Lead</div>
+        <div class="modal-subtitle">Fill in the lead details below</div>
+      </div>
+      <button class="modal-close" onclick="closeLeadModal()">×</button>
+    </div>
+    <div class="modal-body">
+      <form id="lead-form" onsubmit="event.preventDefault()">
+
+        <!-- Contact Info -->
+        <div class="section-divider">Contact Information</div>
+        <div class="form-row">
+          <div class="form-group">
+            <label class="form-label" for="lead-name">Full Name <span class="required">*</span></label>
+            <input type="text" id="lead-name" class="form-control" placeholder="Jane Smith" required />
+          </div>
+          <div class="form-group">
+            <label class="form-label" for="lead-phone">Phone</label>
+            <input type="tel" id="lead-phone" class="form-control" placeholder="(555) 000-0000" />
+          </div>
+        </div>
+        <div class="form-row">
+          <div class="form-group">
+            <label class="form-label" for="lead-email">Email</label>
+            <input type="email" id="lead-email" class="form-control" placeholder="jane@example.com" />
+          </div>
+          <div class="form-group">
+            <label class="form-label" for="lead-company">Company / Family Name</label>
+            <input type="text" id="lead-company" class="form-control" placeholder="Smith Family" />
+          </div>
+        </div>
+
+        <!-- Response & Lead Status -->
+        <div class="section-divider">Lead Status</div>
+
+        <!-- Response Status (radio pills) -->
+        <div class="form-group">
+          <label class="form-label">Response Status</label>
+          <div class="radio-pills">
+            <div class="radio-pill pill-answered">
+              <input type="radio" name="responseStatus" id="rs-answered" value="answered" />
+              <label for="rs-answered">✅ Answered</label>
+            </div>
+            <div class="radio-pill pill-no_answer">
+              <input type="radio" name="responseStatus" id="rs-no-answer" value="no_answer" checked />
+              <label for="rs-no-answer">📵 No Answer</label>
+            </div>
+            <div class="radio-pill pill-text">
+              <input type="radio" name="responseStatus" id="rs-text" value="text" />
+              <label for="rs-text">💬 Text</label>
+            </div>
+          </div>
+        </div>
+
+        <!-- Lead Status (select) -->
+        <div class="form-group">
+          <label class="form-label" for="lead-status-select">Lead Status</label>
+          <select id="lead-status-select" class="form-control" style="max-width:240px">
+            <option value="active">🟢 Active</option>
+            <option value="not_active">⚫ Not Active</option>
+            <option value="dead">💀 Dead</option>
+            <option value="lost">🔴 Lost</option>
+            <option value="long_term">⏳ Long Term</option>
+          </select>
+        </div>
+
+        <!-- Lead Source -->
+        <div class="section-divider">Lead Source</div>
+        <div class="form-group">
+          <label class="form-label">Where did this lead come from?</label>
+          <div class="checkbox-pills">
+            <div class="checkbox-pill">
+              <input type="checkbox" name="leadSource" id="src-fb" value="facebook" />
+              <label for="src-fb">📘 Facebook</label>
+            </div>
+            <div class="checkbox-pill">
+              <input type="checkbox" name="leadSource" id="src-ig" value="instagram" />
+              <label for="src-ig">📷 Instagram</label>
+            </div>
+            <div class="checkbox-pill">
+              <input type="checkbox" name="leadSource" id="src-tt" value="tiktok" />
+              <label for="src-tt">🎵 TikTok</label>
+            </div>
+            <div class="checkbox-pill">
+              <input type="checkbox" name="leadSource" id="src-cl" value="craigslist" />
+              <label for="src-cl">🔎 Craigslist</label>
+            </div>
+            <div class="checkbox-pill">
+              <input type="checkbox" name="leadSource" id="src-ref" value="referral" />
+              <label for="src-ref">🤝 Referral</label>
+            </div>
+            <div class="checkbox-pill">
+              <input type="checkbox" name="leadSource" id="src-sign" value="signage" />
+              <label for="src-sign">🪧 Signage</label>
+            </div>
+          </div>
+        </div>
+
+        <!-- Notes -->
+        <div class="section-divider">Notes & Automation</div>
+        <div class="form-group">
+          <label class="form-label" for="lead-notes">Notes</label>
+          <textarea id="lead-notes" class="form-control" rows="3" placeholder="Any additional notes…"></textarea>
+        </div>
+
+        <!-- Call task frequency -->
+        <div class="form-group">
+          <label class="form-label" for="lead-freq">Call Reminder Frequency</label>
+          <select id="lead-freq" class="form-control" style="max-width:200px">
+            <option value="2">Every 2 hours</option>
+            <option value="4" selected>Every 4 hours</option>
+            <option value="6">Every 6 hours</option>
+            <option value="8">Every 8 hours</option>
+          </select>
+          <div class="schedule-info-box">
+            <strong>Auto-Task:</strong> If response status is <em>No Answer</em> or <em>Text</em>, a recurring call task will be
+            scheduled at the selected frequency, <strong>8am–7pm Mon–Sat</strong>. Tasks stop when the lead is marked <em>Answered</em> or <em>Active</em>.
+          </div>
+        </div>
+
+        <!-- Email template -->
+        <div class="form-group">
+          <label class="form-label" for="lead-email-template">Auto-Send Email Template</label>
+          <select id="lead-email-template" class="form-control" style="max-width:320px">
+            <option value="">— No template —</option>
+          </select>
+          <p class="text-xs text-muted mt-1">If selected and lead has an email, this template is sent automatically on save.</p>
+        </div>
+
+      </form>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-outline" onclick="closeLeadModal()">Cancel</button>
+      <button class="btn btn-primary" onclick="submitLeadForm()">💾 Save Lead</button>
+    </div>
+  </div>
+</div>
+
+
+<!-- ═══════════════════════════════════════════════════════
+     MODAL: LEAD DETAIL
+═══════════════════════════════════════════════════════ -->
+<div id="detail-modal" class="modal-overlay hidden">
+  <div class="modal modal-lg">
+    <div class="modal-header">
+      <div class="modal-title" id="detail-modal-title">Lead Details</div>
+      <button class="modal-close" onclick="closeDetailModal()">×</button>
+    </div>
+    <div class="modal-body" id="detail-content"></div>
+  </div>
+</div>
+
+
+<!-- ═══════════════════════════════════════════════════════
+     MODAL: SEND EMAIL
+═══════════════════════════════════════════════════════ -->
+<div id="send-email-modal" class="modal-overlay hidden" data-lead-id="">
+  <div class="modal modal-sm">
+    <div class="modal-header">
+      <div class="modal-title">Send Email</div>
+      <button class="modal-close" onclick="document.getElementById('send-email-modal').classList.add('hidden')">×</button>
+    </div>
+    <div class="modal-body">
+      <div class="form-group">
+        <label class="form-label">Select Template</label>
+        <select id="send-email-template-sel" class="form-control"></select>
+      </div>
+      <div id="send-email-preview" class="mt-3"></div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-outline btn-sm" onclick="document.getElementById('send-email-modal').classList.add('hidden')">Cancel</button>
+      <button class="btn btn-primary btn-sm" onclick="submitSendEmail()">📧 Send Email</button>
+    </div>
+  </div>
+</div>
+
+
+<!-- ═══════════════════════════════════════════════════════
+     MODAL: EMAIL TEMPLATE EDITOR
+═══════════════════════════════════════════════════════ -->
+<div id="template-modal" class="modal-overlay hidden">
+  <div class="modal">
+    <div class="modal-header">
+      <div class="modal-title" id="template-modal-title">New Template</div>
+      <button class="modal-close" onclick="closeTemplateModal()">×</button>
+    </div>
+    <div class="modal-body">
+      <div class="form-group">
+        <label class="form-label">Template Name <span class="required">*</span></label>
+        <input type="text" id="tpl-name" class="form-control" placeholder="e.g. Follow-Up Email" />
+      </div>
+      <div class="form-group">
+        <label class="form-label">Auto-Send Trigger</label>
+        <select id="tpl-trigger" class="form-control">
+          <option value="">Manual only</option>
+          <option value="no_answer">When response = No Answer</option>
+          <option value="active">When lead status = Active</option>
+        </select>
+      </div>
+      <div class="form-group">
+        <label class="form-label">Subject <span class="required">*</span></label>
+        <input type="text" id="tpl-subject" class="form-control" placeholder="Subject line…" />
+      </div>
+      <div class="form-group">
+        <label class="form-label">Body <span class="required">*</span></label>
+        <textarea id="tpl-body" class="form-control" rows="8" placeholder="Email body…&#10;&#10;Use {lead_name}, {company}, {phone}, {email}"></textarea>
+      </div>
+      <div style="background:var(--gray-50);border-radius:6px;padding:10px 12px;font-size:12px;color:var(--gray-500)">
+        Available variables: <strong>{lead_name}</strong> · <strong>{company}</strong> · <strong>{phone}</strong> · <strong>{email}</strong>
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-outline" onclick="closeTemplateModal()">Cancel</button>
+      <button class="btn btn-primary" onclick="submitTemplateForm()">💾 Save Template</button>
+    </div>
+  </div>
+</div>
+
+
+<!-- ═══════════════════════════════════════════════════════
+     SCRIPTS  (order matters: utils → data → app)
+═══════════════════════════════════════════════════════ -->
+<script src="/js/utils.js"></script>
+<script src="/js/notifications.js"></script>
+<script src="/js/leads.js"></script>
+<script src="/js/tasks.js"></script>
+<script src="/js/email.js"></script>
+<script src="/js/app.js"></script>
+
+<!-- Refresh email log when email page is viewed -->
+<script>
+  document.addEventListener('DOMContentLoaded', () => {
+    // Patch navigateTo to also refresh email log
+    const _orig = window.navigateTo;
+    window.navigateTo = function(page) {
+      _orig(page);
+      if (page === 'email') {
+        renderEmailLog(null, 'email-log-all');
+      }
+    };
+  });
+</script>
+
+</body>
+</html>
