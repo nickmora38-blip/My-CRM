@@ -1,0 +1,282 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Lead CRM - Pipeline Management</title>
+  <link rel="stylesheet" href="/src/styles.css">
+</head>
+<body>
+
+  <div id="app">
+
+    <!-- ── Navigation ─────────────────────────────────────────── -->
+    <nav class="navbar">
+      <div class="navbar-brand">Lead CRM</div>
+      <ul class="nav-links">
+        <li><a href="#" data-view="dashboard"  class="nav-link active">Dashboard</a></li>
+        <li><a href="#" data-view="leads"       class="nav-link">Leads</a></li>
+        <li><a href="#" data-view="pipeline"    class="nav-link">Pipeline</a></li>
+        <li><a href="#" data-view="conditions"  class="nav-link">Conditions</a></li>
+        <li><a href="#" data-view="logistics"   class="nav-link">Site Logistics</a></li>
+      </ul>
+    </nav>
+
+    <!-- ── Main Content ───────────────────────────────────────── -->
+    <main class="main-content">
+
+      <!-- Dashboard -->
+      <div id="dashboard-view" class="view active">
+        <h1>Dashboard</h1>
+        <div class="dashboard-grid">
+          <div class="stat-card">
+            <h3>Total Leads</h3>
+            <p id="total-leads">0</p>
+          </div>
+          <div class="stat-card">
+            <h3>Active Leads</h3>
+            <p id="in-progress-count">0</p>
+          </div>
+          <div class="stat-card">
+            <h3>Dead Leads</h3>
+            <p id="completed-count">0</p>
+          </div>
+          <div class="stat-card">
+            <h3>Site Jobs</h3>
+            <p id="site-jobs-count">0</p>
+          </div>
+        </div>
+        <div class="recent-activity">
+          <h2>Recent Leads</h2>
+          <div id="recent-leads-list"></div>
+        </div>
+      </div>
+
+      <!-- Leads -->
+      <div id="leads-view" class="view">
+        <div class="leads-header">
+          <h1>Leads Management</h1>
+          <button id="add-lead-btn" class="btn btn-primary">+ Add Lead</button>
+        </div>
+        <div id="leads-container" class="leads-list"></div>
+      </div>
+
+      <!-- Pipeline -->
+      <div id="pipeline-view" class="view">
+        <h1>Production Pipeline</h1>
+        <div class="pipeline-container" id="pipeline-container"></div>
+      </div>
+
+      <!-- Conditions -->
+      <div id="conditions-view" class="view">
+        <div class="conditions-header">
+          <h1>Collected Conditions</h1>
+          <button id="add-condition-btn" class="btn btn-primary">+ Add Conditions</button>
+        </div>
+        <div id="conditions-list" class="conditions-list"></div>
+      </div>
+
+      <!-- Site Logistics -->
+      <div id="logistics-view" class="view">
+        <div class="logistics-header">
+          <h1>Site Work Logistics</h1>
+          <button id="add-logistics-btn" class="btn btn-primary">+ Add Job</button>
+        </div>
+        <div id="logistics-list" class="logistics-list"></div>
+      </div>
+
+    </main>
+  </div><!-- /#app -->
+
+
+  <!-- ================================================================
+       LEAD MODAL
+       ================================================================ -->
+  <div id="lead-modal" class="modal">
+    <div class="modal-content">
+      <span class="close">&times;</span>
+      <h2>Add New Lead</h2>
+      <form id="lead-form">
+        <input type="text"  id="lead-name"    placeholder="Lead Name"    required>
+        <input type="email" id="lead-email"   placeholder="Email"        required>
+        <input type="tel"   id="lead-phone"   placeholder="Phone Number" required>
+        <input type="text"  id="lead-company" placeholder="Company"      required>
+        <select id="lead-stage">
+          <option value="">Select Stage</option>
+          <option value="lead">Lead</option>
+          <option value="contact">Contact</option>
+          <option value="submitted">Submitted</option>
+          <option value="dead">Dead</option>
+          <option value="long-term">Long Term</option>
+        </select>
+        <textarea id="lead-notes" placeholder="Notes"></textarea>
+        <button type="submit" class="btn btn-primary">Add Lead</button>
+      </form>
+    </div>
+  </div>
+
+
+  <!-- ================================================================
+       CONDITIONS MODAL
+       ================================================================ -->
+  <div id="condition-modal" class="modal">
+    <div class="modal-content large-modal">
+      <span class="close">&times;</span>
+      <h2>Add Conditions for Lead</h2>
+      <form id="condition-form">
+
+        <div class="form-group">
+          <label for="condition-lead">Lead Name:</label>
+          <input type="text" id="condition-lead" placeholder="Enter lead name" required>
+        </div>
+
+        <div class="conditions-grid">
+
+          <!-- ── 9 Yes / No / N/A radio items ────────────────────── -->
+
+          <div class="condition-item">
+            <label>Deposit:</label>
+            <div class="radio-group">
+              <label><input type="radio" name="deposit" value="yes"> Yes</label>
+              <label><input type="radio" name="deposit" value="no"> No</label>
+              <label><input type="radio" name="deposit" value="na" checked> N/A</label>
+            </div>
+          </div>
+
+          <div class="condition-item">
+            <label>CV:</label>
+            <div class="radio-group">
+              <label><input type="radio" name="cv" value="yes"> Yes</label>
+              <label><input type="radio" name="cv" value="no"> No</label>
+              <label><input type="radio" name="cv" value="na" checked> N/A</label>
+            </div>
+          </div>
+
+          <div class="condition-item">
+            <label>Paystub:</label>
+            <div class="radio-group">
+              <label><input type="radio" name="paystub" value="yes"> Yes</label>
+              <label><input type="radio" name="paystub" value="no"> No</label>
+              <label><input type="radio" name="paystub" value="na" checked> N/A</label>
+            </div>
+          </div>
+
+          <div class="condition-item">
+            <label>W2:</label>
+            <div class="radio-group">
+              <label><input type="radio" name="w2" value="yes"> Yes</label>
+              <label><input type="radio" name="w2" value="no"> No</label>
+              <label><input type="radio" name="w2" value="na" checked> N/A</label>
+            </div>
+          </div>
+
+          <div class="condition-item">
+            <label>Taxes:</label>
+            <div class="radio-group">
+              <label><input type="radio" name="taxes" value="yes"> Yes</label>
+              <label><input type="radio" name="taxes" value="no"> No</label>
+              <label><input type="radio" name="taxes" value="na" checked> N/A</label>
+            </div>
+          </div>
+
+          <div class="condition-item">
+            <label>Land Deed:</label>
+            <div class="radio-group">
+              <label><input type="radio" name="land-deed" value="yes"> Yes</label>
+              <label><input type="radio" name="land-deed" value="no"> No</label>
+              <label><input type="radio" name="land-deed" value="na" checked> N/A</label>
+            </div>
+          </div>
+
+          <div class="condition-item">
+            <label>Land Location:</label>
+            <div class="radio-group">
+              <label><input type="radio" name="land-location" value="yes"> Yes</label>
+              <label><input type="radio" name="land-location" value="no"> No</label>
+              <label><input type="radio" name="land-location" value="na" checked> N/A</label>
+            </div>
+          </div>
+
+          <div class="condition-item">
+            <label>Site Inspection:</label>
+            <div class="radio-group">
+              <label><input type="radio" name="site-inspection" value="yes"> Yes</label>
+              <label><input type="radio" name="site-inspection" value="no"> No</label>
+              <label><input type="radio" name="site-inspection" value="na" checked> N/A</label>
+            </div>
+          </div>
+
+          <div class="condition-item">
+            <label>Delivery Request:</label>
+            <div class="radio-group">
+              <label><input type="radio" name="delivery-request" value="yes"> Yes</label>
+              <label><input type="radio" name="delivery-request" value="no"> No</label>
+              <label><input type="radio" name="delivery-request" value="na" checked> N/A</label>
+            </div>
+          </div>
+
+          <!-- ── 3 converted text / date items ────────────────────── -->
+
+          <div class="condition-item">
+            <label for="estimated-gross">Estimated Gross:</label>
+            <input type="text" id="estimated-gross" placeholder="Enter estimated gross amount">
+          </div>
+
+          <div class="condition-item">
+            <label for="offline-date">Offline Date:</label>
+            <input type="date" id="offline-date">
+          </div>
+
+          <div class="condition-item">
+            <label for="cocs">COCS:</label>
+            <input type="text" id="cocs" placeholder="Enter COCS information">
+          </div>
+
+        </div><!-- /.conditions-grid -->
+
+        <div class="form-group">
+          <label for="condition-notes">Additional Notes:</label>
+          <textarea id="condition-notes" placeholder="Any additional notes about the conditions"></textarea>
+        </div>
+
+        <div class="form-group">
+          <label>Upload Documents:</label>
+          <input type="file" id="condition-files" multiple accept=".pdf,.doc,.docx,.jpg,.png">
+          <small>Supported formats: PDF, DOC, DOCX, JPG, PNG</small>
+        </div>
+
+        <button type="submit" class="btn btn-primary">Save Conditions</button>
+      </form>
+    </div>
+  </div>
+
+
+  <!-- ================================================================
+       LOGISTICS MODAL
+       ================================================================ -->
+  <div id="logistics-modal" class="modal">
+    <div class="modal-content">
+      <span class="close">&times;</span>
+      <h2>Add Site Work Job</h2>
+      <form id="logistics-form">
+        <input type="text" id="logistics-job-id"        placeholder="Job ID"       required>
+        <input type="text" id="logistics-site-location" placeholder="Site Location" required>
+        <input type="text" id="logistics-work-type"     placeholder="Work Type"    required>
+        <select id="logistics-status">
+          <option value="">Select Status</option>
+          <option value="scheduled">Scheduled</option>
+          <option value="in-progress">In Progress</option>
+          <option value="completed">Completed</option>
+          <option value="on-hold">On Hold</option>
+        </select>
+        <input type="date" id="logistics-start-date" required>
+        <input type="date" id="logistics-end-date">
+        <textarea id="logistics-notes" placeholder="Notes"></textarea>
+        <button type="submit" class="btn btn-primary">Add Job</button>
+      </form>
+    </div>
+  </div>
+
+  <script type="module" src="/src/main.js"></script>
+</body>
+</html>

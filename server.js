@@ -7,8 +7,8 @@ const PORT = process.env.PORT || 5000;
 // Serve static files from the public directory
 app.use(express.static(path.join(__dirname, 'public')));
 
-// Handle React routing by returning index.html for all requests
-app.get('*', (req, res) => {
+// Handle client-side routing by returning index.html for all requests
+app.get('/*splat', (req, res) => {
     res.sendFile(path.join(__dirname, 'public', 'index.html'));
 });
 
