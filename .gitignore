@@ -1,5 +1,28 @@
+
+# Dependencies
 node_modules/
+client/node_modules/
+
+# Environment files
 .env
+.env.local
+.env.*.local
+
+# Editor files
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Logs
 *.log
-dist/
-build/
+npm-debug.log*
+
+# Runtime data
+*.pid
+*.seed
+*.pid.lock
