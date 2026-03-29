@@ -1,8 +1,18 @@
 const express = require('express');
 const path = require('path');
+const rateLimit = require('express-rate-limit');
 
 const app = express();
 const PORT = process.env.PORT || 5000;
+
+// Rate-limit all requests (200 per minute per IP)
+const limiter = rateLimit({
+    windowMs: 60 * 1000,
+    max: 200,
+    standardHeaders: true,
+    legacyHeaders: false,
+});
+app.use(limiter);
 
 // Serve static files from the public directory
 app.use(express.static(path.join(__dirname, 'public')));
