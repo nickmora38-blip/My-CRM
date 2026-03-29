@@ -1,0 +1,1 @@
+{\n  "name": "my-crm",\n  "version": "1.0.0",\n  "scripts": {\n    "build": "npm run build --prefix frontend && npm run build --prefix backend",\n    "start": "npm start --prefix frontend & npm start --prefix backend"\n  },\n  "dependencies": {},\n  "devDependencies": {}\n}
