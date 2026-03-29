@@ -12,7 +12,7 @@ export default function Button({
   className = '',
   ...props
 }: ButtonProps) {
-  const base = 'inline-flex items-center justify-center font-semibold rounded-lg transition-colors duration-200 disabled:opacity-50 disabled:cursor-not-allowed';
+  const base = 'inline-flex items-center justify-center font-semibold rounded-lg transition-colors duration-200 disabled:opacity-50 disabled:cursor-not-allowed min-h-[44px]';
 
   const variants = {
     primary: 'bg-exclusive-red hover:bg-exclusive-red-dark text-white',
@@ -22,8 +22,8 @@ export default function Button({
   };
 
   const sizes = {
-    sm: 'px-3 py-1.5 text-sm',
-    md: 'px-4 py-2 text-sm',
+    sm: 'px-3 py-2 text-sm',
+    md: 'px-4 py-2.5 text-sm',
     lg: 'px-6 py-3 text-base',
   };
 

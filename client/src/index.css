@@ -11,11 +11,11 @@
 
 @layer components {
   .exclusive-btn {
-    @apply bg-exclusive-red hover:bg-exclusive-red-dark text-white font-semibold px-4 py-2 rounded-lg transition-colors duration-200;
+    @apply bg-exclusive-red hover:bg-exclusive-red-dark text-white font-semibold px-4 py-2.5 rounded-lg transition-colors duration-200 min-h-[44px];
   }
 
   .exclusive-btn-outline {
-    @apply border border-exclusive-red text-exclusive-red hover:bg-exclusive-red hover:text-white font-semibold px-4 py-2 rounded-lg transition-colors duration-200;
+    @apply border border-exclusive-red text-exclusive-red hover:bg-exclusive-red hover:text-white font-semibold px-4 py-2.5 rounded-lg transition-colors duration-200 min-h-[44px];
   }
 
   .exclusive-card {
@@ -23,12 +23,14 @@
   }
 
   .exclusive-input {
-    @apply bg-exclusive-black-soft border border-exclusive-black-border text-white rounded-lg px-4 py-2 focus:outline-none focus:border-exclusive-red focus:ring-1 focus:ring-exclusive-red;
+    @apply bg-exclusive-black-soft border border-exclusive-black-border text-white rounded-lg px-4 py-3 focus:outline-none focus:border-exclusive-red focus:ring-1 focus:ring-exclusive-red min-h-[44px];
   }
 }
 
+/* Scrollbar */
 ::-webkit-scrollbar {
-  width: 6px;
+  width: 4px;
+  height: 4px;
 }
 ::-webkit-scrollbar-track {
   background: #111111;
@@ -36,4 +38,22 @@
 ::-webkit-scrollbar-thumb {
   background: #DC143C;
   border-radius: 3px;
+}
+
+/* Prevent horizontal overflow on mobile */
+html, body {
+  overflow-x: hidden;
+  max-width: 100vw;
+}
+
+/* Improve tap target sizes on mobile */
+@media (max-width: 640px) {
+  input, select, textarea {
+    font-size: 16px; /* prevents iOS zoom on focus */
+    min-height: 44px;
+  }
+
+  button {
+    min-height: 44px;
+  }
 }

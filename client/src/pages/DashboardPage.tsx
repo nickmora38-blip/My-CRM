@@ -76,21 +76,21 @@ export default function DashboardPage() {
     <div className="min-h-screen bg-black">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         {/* Header */}
-        <div className="mb-8 flex items-center justify-between">
+        <div className="mb-6 sm:mb-8 flex items-center justify-between gap-3">
           <div>
-            <h1 className="text-2xl font-bold text-white">Dashboard</h1>
-            <p className="text-gray-400 text-sm mt-1">Welcome to Exclusive Mobile Home Transport CRM</p>
+            <h1 className="text-xl sm:text-2xl font-bold text-white">Dashboard</h1>
+            <p className="text-gray-400 text-xs sm:text-sm mt-1">Welcome to Exclusive Mobile Home Transport CRM</p>
           </div>
           <Link
             to="/leads"
-            className="bg-exclusive-red hover:bg-exclusive-red-dark text-white font-semibold px-4 py-2 rounded-lg transition-colors text-sm"
+            className="bg-exclusive-red hover:bg-exclusive-red-dark text-white font-semibold px-3 sm:px-4 py-2.5 rounded-lg transition-colors text-sm shrink-0 min-h-[44px] flex items-center"
           >
             + New Lead
           </Link>
         </div>
 
         {/* Stat Cards */}
-        <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4 mb-6 sm:mb-8">
           <StatCard title="Total Leads" value={totalLeads} icon="👥" trend="12%" trendUp={true} />
           <StatCard title="New Leads" value={newLeads} icon="🆕" trend="8%" trendUp={true} />
           <StatCard title="Deals Won" value={wonLeads} icon="✅" trend="5%" trendUp={true} />
