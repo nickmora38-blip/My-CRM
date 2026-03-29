@@ -98,8 +98,8 @@ function nextCallSlot(fromDate, freqHours) {
  */
 function scheduleCallTask(lead) {
   if (!['no_answer','text'].includes(lead.responseStatus)) return;
-  // Stop scheduling if lead status makes it inactive
-  if (['answered','active'].includes(lead.leadStatus) && lead.responseStatus === 'answered') return;
+  // Stop scheduling if lead status is active (resolved)
+  if (lead.leadStatus === 'active') return;
 
   // Remove any existing pending tasks for this lead
   const existing = getTasksForLead(lead.id).filter(t => t.status === 'pending');
@@ -149,10 +149,9 @@ function completeTask(taskId) {
   saveTask(updated);
   logActivity(task.leadId, 'task', `Call task completed`);
 
-  // Schedule next if lead still needs it
+  // Schedule next if lead still needs follow-up
   const lead = getLeadById(task.leadId);
-  if (lead && ['no_answer','text'].includes(lead.responseStatus)
-      && !['answered'].includes(lead.responseStatus)) {
+  if (lead && ['no_answer','text'].includes(lead.responseStatus)) {
     scheduleNextAfterCompletion(lead, task.freqHours || 4);
   }
   updateTaskBadge();
@@ -210,7 +209,7 @@ function runTaskChecker() {
       showNotification(
         'warning',
         '📞 Call Reminder',
-        `Time to call ${escHtml(task.leadName || 'lead')}${task.assignedTo ? ' — assigned to ' + task.assignedTo : ''}`,
+        `Time to call ${escHtml(task.leadName || 'lead')}${task.assignedTo ? ' — assigned to ' + escHtml(task.assignedTo) : ''}`,
         6000
       );
       logActivity(task.leadId, 'task', `Call reminder triggered for ${task.leadName}`);
