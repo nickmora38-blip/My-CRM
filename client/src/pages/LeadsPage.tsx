@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { useDispatch, useSelector } from 'react-redux';
+import { useNavigate } from 'react-router-dom';
 import { RootState } from '../store';
 import { setLeads, addLead, updateLead, deleteLead, Lead } from '../store/slices/leadsSlice';
 import { leadsAPI } from '../services/api';
@@ -22,6 +23,7 @@ const EMPTY_FORM = {
   origin: '',
   destination: '',
   estimatedValue: '',
+  moveDate: '',
 };
 
 const DEMO_LEADS: Lead[] = [
@@ -32,8 +34,22 @@ const DEMO_LEADS: Lead[] = [
   { id: '5', name: 'Michael Brown', email: 'michael@example.com', phone: '555-0105', status: 'closed_won', source: 'Website', notes: 'Completed transport', createdAt: new Date(Date.now() - 345600000).toISOString(), homeType: 'Double Wide', origin: 'Seattle, WA', destination: 'Portland, OR', estimatedValue: 6400 },
 ];
 
+type SortField = 'name' | 'status' | 'estimatedValue' | 'createdAt' | 'source';
+type SortDir = 'asc' | 'desc';
+type ViewMode = 'table' | 'kanban';
+
+const KANBAN_COLUMNS: { status: Lead['status']; label: string; borderColor: string }[] = [
+  { status: 'new', label: 'New', borderColor: 'border-exclusive-red/40' },
+  { status: 'contacted', label: 'Contacted', borderColor: 'border-blue-700/40' },
+  { status: 'qualified', label: 'Qualified', borderColor: 'border-yellow-700/40' },
+  { status: 'proposal', label: 'Proposal', borderColor: 'border-purple-700/40' },
+  { status: 'closed_won', label: 'Won', borderColor: 'border-green-700/40' },
+  { status: 'closed_lost', label: 'Lost', borderColor: 'border-gray-700/40' },
+];
+
 export default function LeadsPage() {
   const dispatch = useDispatch();
+  const navigate = useNavigate();
   const leads = useSelector((state: RootState) => state.leads.leads);
 
   const [modalOpen, setModalOpen] = useState(false);
@@ -42,6 +58,10 @@ export default function LeadsPage() {
   const [search, setSearch] = useState('');
   const [filterStatus, setFilterStatus] = useState<string>('all');
   const [saving, setSaving] = useState(false);
+  const [sortField, setSortField] = useState<SortField>('createdAt');
+  const [sortDir, setSortDir] = useState<SortDir>('desc');
+  const [viewMode, setViewMode] = useState<ViewMode>('table');
+  const [quickStatusId, setQuickStatusId] = useState<string | null>(null);
 
   useEffect(() => {
     const fetchLeads = async () => {
@@ -53,6 +73,7 @@ export default function LeadsPage() {
       }
     };
     fetchLeads();
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const openCreate = () => {
@@ -74,6 +95,7 @@ export default function LeadsPage() {
       origin: lead.origin || '',
       destination: lead.destination || '',
       estimatedValue: lead.estimatedValue?.toString() || '',
+      moveDate: lead.moveDate || '',
     });
     setModalOpen(true);
   };
@@ -94,7 +116,6 @@ export default function LeadsPage() {
         dispatch(addLead(res.data));
       }
     } catch {
-      // Demo mode: update local state
       if (editLead) {
         dispatch(updateLead({ ...editLead, ...payload, estimatedValue: payload.estimatedValue }));
       } else {
@@ -120,22 +141,91 @@ export default function LeadsPage() {
     dispatch(deleteLead(id));
   };
 
-  const filtered = leads.filter((l) => {
-    const matchSearch =
-      !search ||
-      l.name.toLowerCase().includes(search.toLowerCase()) ||
-      l.email.toLowerCase().includes(search.toLowerCase()) ||
-      l.phone.includes(search);
-    const matchStatus = filterStatus === 'all' || l.status === filterStatus;
-    return matchSearch && matchStatus;
-  });
+  const handleQuickStatus = async (lead: Lead, newStatus: Lead['status']) => {
+    setQuickStatusId(null);
+    try {
+      const res = await leadsAPI.update(lead.id, { status: newStatus });
+      dispatch(updateLead(res.data));
+    } catch {
+      dispatch(updateLead({ ...lead, status: newStatus }));
+    }
+  };
+
+  const handleSort = (field: SortField) => {
+    if (sortField === field) {
+      setSortDir((d) => (d === 'asc' ? 'desc' : 'asc'));
+    } else {
+      setSortField(field);
+      setSortDir('asc');
+    }
+  };
+
+  const handleExportCSV = () => {
+    const headers = ['Name', 'Email', 'Phone', 'Status', 'Source', 'Home Type', 'Origin', 'Destination', 'Estimated Value', 'Notes', 'Created'];
+    const rows = filtered.map((l) => [
+      l.name,
+      l.email,
+      l.phone,
+      l.status,
+      l.source,
+      l.homeType || '',
+      l.origin || '',
+      l.destination || '',
+      l.estimatedValue ?? '',
+      (l.notes || '').replace(/,/g, ';').replace(/\n/g, ' '),
+      new Date(l.createdAt).toLocaleDateString(),
+    ]);
+    const csv = [headers, ...rows].map((r) => r.map((v) => `"${v}"`).join(',')).join('\n');
+    const blob = new Blob([csv], { type: 'text/csv' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = 'leads.csv';
+    a.click();
+    URL.revokeObjectURL(url);
+  };
+
+  const filtered = leads
+    .filter((l) => {
+      const matchSearch =
+        !search ||
+        l.name.toLowerCase().includes(search.toLowerCase()) ||
+        l.email.toLowerCase().includes(search.toLowerCase()) ||
+        l.phone.includes(search);
+      const matchStatus = filterStatus === 'all' || l.status === filterStatus;
+      return matchSearch && matchStatus;
+    })
+    .sort((a, b) => {
+      let valA: string | number = '';
+      let valB: string | number = '';
+      if (sortField === 'estimatedValue') {
+        valA = a.estimatedValue ?? -1;
+        valB = b.estimatedValue ?? -1;
+      } else if (sortField === 'createdAt') {
+        valA = new Date(a.createdAt).getTime();
+        valB = new Date(b.createdAt).getTime();
+      } else {
+        valA = ((a[sortField] as string) || '').toLowerCase();
+        valB = ((b[sortField] as string) || '').toLowerCase();
+      }
+      if (valA < valB) return sortDir === 'asc' ? -1 : 1;
+      if (valA > valB) return sortDir === 'asc' ? 1 : -1;
+      return 0;
+    });
 
   const inputClass =
     'w-full px-3 py-2 bg-black border border-exclusive-black-border text-white rounded-lg focus:outline-none focus:border-exclusive-red focus:ring-1 focus:ring-exclusive-red text-sm placeholder-gray-600';
   const labelClass = 'block text-xs font-medium text-gray-400 mb-1';
 
+  const SortIcon = ({ field }: { field: SortField }) =>
+    sortField === field ? (
+      <span className="ml-1 text-exclusive-red">{sortDir === 'asc' ? '↑' : '↓'}</span>
+    ) : (
+      <span className="ml-1 text-gray-700">↕</span>
+    );
+
   return (
-    <div className="min-h-screen bg-black">
+    <div className="min-h-screen bg-black" onClick={() => quickStatusId && setQuickStatusId(null)}>
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         {/* Header */}
         <div className="flex items-center justify-between mb-6 gap-3">
@@ -143,10 +233,19 @@ export default function LeadsPage() {
             <h1 className="text-xl sm:text-2xl font-bold text-white">Leads</h1>
             <p className="text-gray-400 text-xs sm:text-sm mt-1">{leads.length} total leads</p>
           </div>
-          <Button onClick={openCreate} className="shrink-0">+ Add Lead</Button>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={handleExportCSV}
+              className="hidden sm:flex items-center gap-1.5 px-3 py-2 text-sm font-medium text-gray-400 border border-exclusive-black-border rounded-lg hover:text-white hover:border-gray-500 transition-colors"
+              title="Export leads to CSV"
+            >
+              ↓ Export
+            </button>
+            <Button onClick={openCreate} className="shrink-0">+ Add Lead</Button>
+          </div>
         </div>
 
-        {/* Filters */}
+        {/* Filters + View Toggle */}
         <div className="flex flex-col sm:flex-row gap-3 mb-6">
           <input
             type="text"
@@ -167,79 +266,203 @@ export default function LeadsPage() {
               </option>
             ))}
           </select>
-        </div>
-
-        {/* Leads Table */}
-        <div className="bg-exclusive-black-card border border-exclusive-black-border rounded-xl overflow-hidden">
-          <div className="overflow-x-auto">
-            <table className="w-full">
-              <thead>
-                <tr className="border-b border-exclusive-black-border">
-                  <th className="text-left px-6 py-3 text-xs font-medium text-gray-400 uppercase tracking-wider">Contact</th>
-                  <th className="text-left px-6 py-3 text-xs font-medium text-gray-400 uppercase tracking-wider hidden lg:table-cell">Route</th>
-                  <th className="text-left px-6 py-3 text-xs font-medium text-gray-400 uppercase tracking-wider hidden md:table-cell">Home Type</th>
-                  <th className="text-left px-6 py-3 text-xs font-medium text-gray-400 uppercase tracking-wider">Status</th>
-                  <th className="text-left px-6 py-3 text-xs font-medium text-gray-400 uppercase tracking-wider hidden sm:table-cell">Value</th>
-                  <th className="text-left px-6 py-3 text-xs font-medium text-gray-400 uppercase tracking-wider hidden sm:table-cell">Source</th>
-                  <th className="px-6 py-3"></th>
-                </tr>
-              </thead>
-              <tbody>
-                {filtered.map((lead, idx) => (
-                  <tr
-                    key={lead.id}
-                    className={`${idx < filtered.length - 1 ? 'border-b border-exclusive-black-border' : ''} hover:bg-black/40 transition-colors`}
-                  >
-                    <td className="px-6 py-4">
-                      <p className="text-white font-medium text-sm">{lead.name}</p>
-                      <p className="text-gray-500 text-xs mt-0.5">{lead.email}</p>
-                      <p className="text-gray-600 text-xs">{lead.phone}</p>
-                    </td>
-                    <td className="px-6 py-4 hidden lg:table-cell">
-                      <p className="text-gray-300 text-sm">{lead.origin || '—'}</p>
-                      <p className="text-gray-500 text-xs mt-0.5">→ {lead.destination || '—'}</p>
-                    </td>
-                    <td className="px-6 py-4 hidden md:table-cell">
-                      <span className="text-gray-300 text-sm">{lead.homeType || '—'}</span>
-                    </td>
-                    <td className="px-6 py-4">
-                      <StatusBadge status={lead.status} />
-                    </td>
-                    <td className="px-6 py-4 hidden sm:table-cell">
-                      <span className="text-white text-sm font-medium">
-                        {lead.estimatedValue ? `$${lead.estimatedValue.toLocaleString()}` : '—'}
-                      </span>
-                    </td>
-                    <td className="px-6 py-4 hidden sm:table-cell">
-                      <span className="text-gray-400 text-xs">{lead.source}</span>
-                    </td>
-                    <td className="px-6 py-4">
-                      <div className="flex items-center gap-2">
-                        <button
-                          onClick={() => openEdit(lead)}
-                          className="text-gray-400 hover:text-white text-xs transition-colors px-2 py-1 rounded hover:bg-exclusive-black-border"
-                        >
-                          Edit
-                        </button>
-                        <button
-                          onClick={() => handleDelete(lead.id)}
-                          className="text-gray-500 hover:text-exclusive-red text-xs transition-colors px-2 py-1 rounded hover:bg-exclusive-red/10"
-                        >
-                          Delete
-                        </button>
-                      </div>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-            {filtered.length === 0 && (
-              <div className="text-center py-16 text-gray-500">
-                {search || filterStatus !== 'all' ? 'No leads match your filters.' : 'No leads yet. Click "+ Add Lead" to get started.'}
-              </div>
-            )}
+          {/* View Toggle */}
+          <div className="flex rounded-lg border border-exclusive-black-border overflow-hidden shrink-0">
+            <button
+              onClick={() => setViewMode('table')}
+              className={`px-3 py-2 text-sm transition-colors ${viewMode === 'table' ? 'bg-exclusive-red text-white' : 'text-gray-400 hover:text-white bg-exclusive-black-card'}`}
+              title="Table view"
+            >
+              ≡ List
+            </button>
+            <button
+              onClick={() => setViewMode('kanban')}
+              className={`px-3 py-2 text-sm transition-colors ${viewMode === 'kanban' ? 'bg-exclusive-red text-white' : 'text-gray-400 hover:text-white bg-exclusive-black-card'}`}
+              title="Kanban view"
+            >
+              ⊞ Board
+            </button>
           </div>
         </div>
+
+        {viewMode === 'table' ? (
+          /* ── TABLE VIEW ── */
+          <div className="bg-exclusive-black-card border border-exclusive-black-border rounded-xl overflow-hidden">
+            <div className="overflow-x-auto">
+              <table className="w-full">
+                <thead>
+                  <tr className="border-b border-exclusive-black-border">
+                    <th
+                      className="text-left px-6 py-3 text-xs font-medium text-gray-400 uppercase tracking-wider cursor-pointer hover:text-white select-none"
+                      onClick={() => handleSort('name')}
+                    >
+                      Contact <SortIcon field="name" />
+                    </th>
+                    <th className="text-left px-6 py-3 text-xs font-medium text-gray-400 uppercase tracking-wider hidden lg:table-cell">Route</th>
+                    <th className="text-left px-6 py-3 text-xs font-medium text-gray-400 uppercase tracking-wider hidden md:table-cell">Home Type</th>
+                    <th
+                      className="text-left px-6 py-3 text-xs font-medium text-gray-400 uppercase tracking-wider cursor-pointer hover:text-white select-none"
+                      onClick={() => handleSort('status')}
+                    >
+                      Status <SortIcon field="status" />
+                    </th>
+                    <th
+                      className="text-left px-6 py-3 text-xs font-medium text-gray-400 uppercase tracking-wider hidden sm:table-cell cursor-pointer hover:text-white select-none"
+                      onClick={() => handleSort('estimatedValue')}
+                    >
+                      Value <SortIcon field="estimatedValue" />
+                    </th>
+                    <th
+                      className="text-left px-6 py-3 text-xs font-medium text-gray-400 uppercase tracking-wider hidden sm:table-cell cursor-pointer hover:text-white select-none"
+                      onClick={() => handleSort('source')}
+                    >
+                      Source <SortIcon field="source" />
+                    </th>
+                    <th className="px-6 py-3"></th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {filtered.map((lead, idx) => (
+                    <tr
+                      key={lead.id}
+                      className={`${idx < filtered.length - 1 ? 'border-b border-exclusive-black-border' : ''} hover:bg-black/40 transition-colors`}
+                    >
+                      <td className="px-6 py-4">
+                        <button
+                          onClick={() => navigate(`/leads/${lead.id}`)}
+                          className="text-left"
+                        >
+                          <p className="text-white font-medium text-sm hover:text-exclusive-red transition-colors">{lead.name}</p>
+                          <p className="text-gray-500 text-xs mt-0.5">{lead.email}</p>
+                          <p className="text-gray-600 text-xs">{lead.phone}</p>
+                        </button>
+                      </td>
+                      <td className="px-6 py-4 hidden lg:table-cell">
+                        <p className="text-gray-300 text-sm">{lead.origin || '—'}</p>
+                        <p className="text-gray-500 text-xs mt-0.5">→ {lead.destination || '—'}</p>
+                      </td>
+                      <td className="px-6 py-4 hidden md:table-cell">
+                        <span className="text-gray-300 text-sm">{lead.homeType || '—'}</span>
+                      </td>
+                      <td className="px-6 py-4">
+                        <div className="relative" onClick={(e) => e.stopPropagation()}>
+                          <button
+                            onClick={() => setQuickStatusId(quickStatusId === lead.id ? null : lead.id)}
+                            className="focus:outline-none"
+                            title="Click to change status"
+                          >
+                            <StatusBadge status={lead.status} />
+                          </button>
+                          {quickStatusId === lead.id && (
+                            <div className="absolute left-0 top-8 z-20 bg-exclusive-black-card border border-exclusive-black-border rounded-lg shadow-xl py-1 min-w-[140px]">
+                              {STATUSES.map((s) => (
+                                <button
+                                  key={s}
+                                  onClick={() => handleQuickStatus(lead, s)}
+                                  className={`w-full text-left px-3 py-2 text-xs hover:bg-black/40 transition-colors ${s === lead.status ? 'text-exclusive-red' : 'text-gray-300'}`}
+                                >
+                                  {s.replace('_', ' ').replace(/\b\w/g, (c) => c.toUpperCase())}
+                                </button>
+                              ))}
+                            </div>
+                          )}
+                        </div>
+                      </td>
+                      <td className="px-6 py-4 hidden sm:table-cell">
+                        <span className="text-white text-sm font-medium">
+                          {lead.estimatedValue ? `$${lead.estimatedValue.toLocaleString()}` : '—'}
+                        </span>
+                      </td>
+                      <td className="px-6 py-4 hidden sm:table-cell">
+                        <span className="text-gray-400 text-xs">{lead.source}</span>
+                      </td>
+                      <td className="px-6 py-4">
+                        <div className="flex items-center gap-2">
+                          <button
+                            onClick={() => navigate(`/leads/${lead.id}`)}
+                            className="text-gray-400 hover:text-white text-xs transition-colors px-2 py-1 rounded hover:bg-exclusive-black-border"
+                          >
+                            View
+                          </button>
+                          <button
+                            onClick={() => openEdit(lead)}
+                            className="text-gray-400 hover:text-white text-xs transition-colors px-2 py-1 rounded hover:bg-exclusive-black-border"
+                          >
+                            Edit
+                          </button>
+                          <button
+                            onClick={() => handleDelete(lead.id)}
+                            className="text-gray-500 hover:text-exclusive-red text-xs transition-colors px-2 py-1 rounded hover:bg-exclusive-red/10"
+                          >
+                            Delete
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+              {filtered.length === 0 && (
+                <div className="text-center py-16 text-gray-500">
+                  {search || filterStatus !== 'all' ? 'No leads match your filters.' : 'No leads yet. Click "+ Add Lead" to get started.'}
+                </div>
+              )}
+            </div>
+          </div>
+        ) : (
+          /* ── KANBAN VIEW ── */
+          <div className="overflow-x-auto pb-4">
+            <div className="flex gap-4 min-w-max">
+              {KANBAN_COLUMNS.map((col) => {
+                const colLeads = filtered.filter((l) => l.status === col.status);
+                return (
+                  <div key={col.status} className={`w-64 bg-exclusive-black-card border ${col.borderColor} rounded-xl flex flex-col`}>
+                    <div className="px-4 py-3 border-b border-exclusive-black-border flex items-center justify-between">
+                      <span className="text-white text-sm font-semibold">{col.label}</span>
+                      <span className="text-gray-500 text-xs bg-exclusive-black-border px-2 py-0.5 rounded-full">{colLeads.length}</span>
+                    </div>
+                    <div className="p-3 space-y-3 flex-1 min-h-[200px]">
+                      {colLeads.map((lead) => (
+                        <div
+                          key={lead.id}
+                          className="bg-black border border-exclusive-black-border rounded-lg p-3 cursor-pointer hover:border-exclusive-red/40 transition-colors"
+                          onClick={() => navigate(`/leads/${lead.id}`)}
+                        >
+                          <p className="text-white text-sm font-medium mb-1 leading-tight">{lead.name}</p>
+                          {lead.homeType && (
+                            <p className="text-gray-500 text-xs mb-1">{lead.homeType}</p>
+                          )}
+                          {(lead.origin || lead.destination) && (
+                            <p className="text-gray-500 text-xs mb-1 truncate">
+                              {lead.origin} → {lead.destination}
+                            </p>
+                          )}
+                          {lead.estimatedValue != null && (
+                            <p className="text-exclusive-red text-xs font-semibold mt-2">
+                              ${lead.estimatedValue.toLocaleString()}
+                            </p>
+                          )}
+                          <div className="mt-2 flex items-center justify-between">
+                            <span className="text-gray-600 text-xs">{lead.source}</span>
+                            <button
+                              onClick={(e) => { e.stopPropagation(); openEdit(lead); }}
+                              className="text-gray-600 hover:text-gray-300 text-xs transition-colors"
+                            >
+                              Edit
+                            </button>
+                          </div>
+                        </div>
+                      ))}
+                      {colLeads.length === 0 && (
+                        <p className="text-gray-700 text-xs text-center pt-4">No leads</p>
+                      )}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        )}
       </div>
 
       {/* Add/Edit Modal */}
@@ -289,6 +512,10 @@ export default function LeadsPage() {
             <div>
               <label className={labelClass}>Destination</label>
               <input className={inputClass} value={form.destination} onChange={(e) => setForm({ ...form, destination: e.target.value })} placeholder="City, State" />
+            </div>
+            <div>
+              <label className={labelClass}>Move Date</label>
+              <input type="date" className={inputClass} value={form.moveDate} onChange={(e) => setForm({ ...form, moveDate: e.target.value })} />
             </div>
             <div className="col-span-2">
               <label className={labelClass}>Notes</label>
