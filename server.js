@@ -2,6 +2,7 @@ const express = require('express');
 const path = require('path');
 const rateLimit = require('express-rate-limit');
 const authRoutes = require('./server/routes/auth');
+const leadsRoutes = require('./server/routes/leads');
 
 const app = express();
 const PORT = process.env.PORT || 5000;
@@ -20,6 +21,9 @@ app.use(express.json());
 
 // Auth routes
 app.use('/api/auth', authRoutes);
+
+// Leads routes
+app.use('/api/leads', leadsRoutes);
 
 // Serve static files from the public directory
 app.use(express.static(path.join(__dirname, 'public')));
