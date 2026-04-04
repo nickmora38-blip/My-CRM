@@ -3,6 +3,9 @@ const path = require('path');
 const rateLimit = require('express-rate-limit');
 const authRoutes = require('./server/routes/auth');
 const leadsRoutes = require('./server/routes/leads');
+const notificationsRoutes = require('./server/routes/notifications');
+const adminRoutes = require('./server/routes/admin');
+const { flagStaleLeads } = require('./server/controllers/leadsController');
 
 const app = express();
 const PORT = process.env.PORT || 5000;
@@ -25,6 +28,12 @@ app.use('/api/auth', authRoutes);
 // Leads routes
 app.use('/api/leads', leadsRoutes);
 
+// Notifications routes
+app.use('/api/notifications', notificationsRoutes);
+
+// Admin routes (role-protected inside)
+app.use('/api/admin', adminRoutes);
+
 // Serve static files from the public directory
 app.use(express.static(path.join(__dirname, 'public')));
 
@@ -41,3 +50,12 @@ app.get('/{*splat}', (req, res) => {
 app.listen(PORT, () => {
     console.log(`Server is running on port ${PORT}`);
 });
+
+// ─── Stale-lead scheduler ────────────────────────────────────────────────────
+// Runs every 30 minutes to mark leads that have been idle in an early
+// pipeline stage. This powers the in-app notification centre.
+const THIRTY_MINUTES = 30 * 60 * 1000;
+flagStaleLeads().catch((err) => console.error('Initial stale-lead scan failed:', err));
+setInterval(() => {
+    flagStaleLeads().catch((err) => console.error('Stale-lead scheduler error:', err));
+}, THIRTY_MINUTES);

@@ -27,26 +27,38 @@ router.get('/:id', (req, res) => {
 });
 
 // POST /api/leads
-router.post('/', (req, res) => {
+router.post('/', async (req, res) => {
     const validationError = validateLeadInput(req.body);
     if (validationError) return res.status(400).json({ error: validationError });
 
-    const lead = createLead(req.userId, req.body);
-    return res.status(201).json(lead);
+    try {
+        const lead = await createLead(req.userId, req.body);
+        return res.status(201).json(lead);
+    } catch (err) {
+        return res.status(err.statusCode || 500).json({ error: err.message });
+    }
 });
 
 // PUT /api/leads/:id
-router.put('/:id', (req, res) => {
-    const lead = updateLead(req.params.id, req.userId, req.body);
-    if (!lead) return res.status(404).json({ error: 'Lead not found' });
-    return res.json(lead);
+router.put('/:id', async (req, res) => {
+    try {
+        const lead = await updateLead(req.params.id, req.userId, req.body);
+        if (!lead) return res.status(404).json({ error: 'Lead not found' });
+        return res.json(lead);
+    } catch (err) {
+        return res.status(err.statusCode || 500).json({ error: err.message });
+    }
 });
 
 // DELETE /api/leads/:id
-router.delete('/:id', (req, res) => {
-    const success = deleteLead(req.params.id, req.userId);
-    if (!success) return res.status(404).json({ error: 'Lead not found' });
-    return res.json({ message: 'Lead deleted' });
+router.delete('/:id', async (req, res) => {
+    try {
+        const success = await deleteLead(req.params.id, req.userId);
+        if (!success) return res.status(404).json({ error: 'Lead not found' });
+        return res.json({ message: 'Lead deleted' });
+    } catch (err) {
+        return res.status(500).json({ error: err.message });
+    }
 });
 
 module.exports = router;

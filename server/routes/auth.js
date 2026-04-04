@@ -25,12 +25,12 @@ router.post('/register', async (req, res) => {
 
     try {
         const hashedPassword = await hashPassword(password);
-        const user = createUser(name, email, hashedPassword);
-        const token = generateToken(user.id);
+        const user = await createUser(name, email, hashedPassword);
+        const token = generateToken(user.id, user.role);
 
         return res.status(201).json({
             token,
-            user: { id: user.id, email: user.email, name: user.name },
+            user: { id: user.id, email: user.email, name: user.name, role: user.role },
         });
     } catch (err) {
         console.error('Registration error:', err);
@@ -57,11 +57,11 @@ router.post('/login', async (req, res) => {
             return res.status(401).json({ error: 'Invalid email or password' });
         }
 
-        const token = generateToken(user.id);
+        const token = generateToken(user.id, user.role);
 
         return res.json({
             token,
-            user: { id: user.id, email: user.email, name: user.name },
+            user: { id: user.id, email: user.email, name: user.name, role: user.role },
         });
     } catch (err) {
         console.error('Login error:', err);
