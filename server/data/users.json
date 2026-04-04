@@ -4,6 +4,15 @@
     "name": "Demo User",
     "email": "demo@exclusive.com",
     "password": "$2b$10$AU7950vmbuKeqaTgczWDAOJd5qSSNp8xjJpJdsUlSFHI8imvAMomG",
+    "role": "admin",
     "created_at": "2026-03-30T17:36:38.284Z"
+  },
+  {
+    "id": "60227158-8530-4a08-bf81-4651684d1404",
+    "name": "Agent User",
+    "email": "agent@test.com",
+    "password": "$2b$10$aibkmG9nNNE2Ir/ENXxWDOcHtbjq0WcAi6n.xSSsocian6vumEhG6",
+    "role": "agent",
+    "created_at": "2026-04-04T01:57:36.347Z"
   }
 ]

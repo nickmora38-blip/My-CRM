@@ -25,4 +25,12 @@ export const leadsAPI = {
   delete: (id: string) => api.delete(`/leads/${id}`),
 };
 
+export const notificationsAPI = {
+  getAll: () => api.get('/notifications'),
+};
+
+export const adminAPI = {
+  getUsers: () => api.get('/admin/users'),
+};
+
 export default api;
