@@ -41,7 +41,9 @@ function validateLeadInput(data) {
 
     // Email format (optional but validated when provided)
     if (data.email && data.email.trim() !== '') {
-        const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+        // The local-part uses [^\s@]+ (fine) and the domain part uses [^\s@.]+
+        // separated by literal dots to avoid polynomial backtracking.
+        const emailRegex = /^[^\s@]+@[^\s@.]+(\.[^\s@.]+)+$/;
         if (!emailRegex.test(String(data.email).trim())) {
             return 'Please provide a valid email address';
         }
@@ -156,8 +158,10 @@ async function createLead(userId, data) {
         }
     }
     if (phone) {
+        // Normalize once here; stored phones are already normalized on write
+        const normalizedPhone = phone.replace(/\s/g, '');
         const dup = leads.find(
-            (l) => l.userId === userId && l.phone && l.phone.replace(/\s/g, '') === phone
+            (l) => l.userId === userId && l.phone && l.phone === normalizedPhone
         );
         if (dup) {
             throw Object.assign(new Error(`A lead with phone "${data.phone}" already exists`), { statusCode: 409 });
