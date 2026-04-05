@@ -1,18 +1,153 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
-    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <meta name="mobile-web-app-capable" content="yes" />
-    <meta name="apple-mobile-web-app-capable" content="yes" />
-    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
-    <meta name="theme-color" content="#000000" />
-    <title>Exclusive Mobile Home Transport CRM</title>
-    <script type="module" crossorigin src="/assets/index-C--GfqLD.js"></script>
-    <link rel="stylesheet" crossorigin href="/assets/index-CTdTlmIe.css">
+    <title>My CRM</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;600;700;800&family=Space+Grotesk:wght@500;700&display=swap"
+      rel="stylesheet"
+    />
+    <link rel="stylesheet" href="/styles.css" />
   </head>
   <body>
-    <div id="root"></div>
+    <div id="background-glow"></div>
+
+    <main class="app-shell">
+      <section id="login-panel" class="panel login-panel">
+        <h1>Lead Command Center</h1>
+        <p class="muted">Sign in to manage your pipeline.</p>
+
+        <div id="login-form-wrap">
+          <form id="login-form" class="grid two-col">
+            <label>
+              Email
+              <input name="email" type="email" value="demo@crm.local" required />
+            </label>
+            <label>
+              Password
+              <input name="password" type="password" value="demo123" required />
+            </label>
+            <button type="submit" class="primary">Sign In</button>
+          </form>
+          <p class="hint">Don't have an account? <a href="#" id="toggle-register">Create one</a></p>
+          <p class="hint">Demo: demo@crm.local / demo123</p>
+        </div>
+
+        <div id="register-form-wrap" class="hidden">
+          <form id="register-form" class="grid two-col">
+            <label class="span-2">
+              Email
+              <input name="email" type="email" placeholder="your@email.com" required />
+            </label>
+            <label class="span-2">
+              Full Name (optional)
+              <input name="name" type="text" placeholder="Your Name" />
+            </label>
+            <label class="span-2">
+              Password
+              <input name="password" type="password" placeholder="At least 6 characters" required />
+            </label>
+            <button type="submit" class="primary">Create Account</button>
+          </form>
+          <p class="hint">Already have an account? <a href="#" id="toggle-login">Sign in</a></p>
+        </div>
+      </section>
+
+      <section id="app-panel" class="panel hidden">
+        <header class="toolbar">
+          <div>
+            <h2>My CRM</h2>
+            <p class="muted" id="user-line"></p>
+          </div>
+          <div class="toolbar-actions">
+            <button id="new-lead-btn" class="primary">New Lead</button>
+            <button id="export-btn">Export CSV</button>
+            <button id="logout-btn">Logout</button>
+          </div>
+        </header>
+
+        <section id="list-view">
+          <div class="filters">
+            <input id="search-input" placeholder="Search name, route, source" />
+            <select id="status-filter">
+              <option value="">All Statuses</option>
+              <option>New</option>
+              <option>Contacted</option>
+              <option>Qualified</option>
+              <option>Proposal</option>
+              <option>Won</option>
+              <option>Lost</option>
+            </select>
+            <select id="source-filter">
+              <option value="">All Sources</option>
+              <option>Facebook</option>
+              <option>TikTok</option>
+              <option>Instagram</option>
+              <option>Referral</option>
+              <option>Google</option>
+              <option>Walk-in</option>
+              <option>Other</option>
+            </select>
+            <div class="segmented">
+              <button id="list-toggle" class="active">List</button>
+              <button id="board-toggle">Board</button>
+            </div>
+          </div>
+
+          <div id="table-wrap" class="table-wrap"></div>
+          <div id="board-wrap" class="board-wrap hidden"></div>
+        </section>
+
+        <section id="detail-view" class="hidden"></section>
+      </section>
+    </main>
+
+    <dialog id="lead-modal">
+      <form id="lead-form" method="dialog">
+        <h3 id="lead-modal-title">New Lead</h3>
+        <div class="grid two-col">
+          <label>First Name <input name="firstName" required /></label>
+          <label>Last Name <input name="lastName" required /></label>
+          <label>Phone <input name="phone" /></label>
+          <label>Email <input name="email" type="email" /></label>
+          <label>Home Type <input name="homeType" placeholder="Single-wide, Double-wide" /></label>
+          <label>Route <input name="route" placeholder="Austin -> Waco" /></label>
+          <label>Estimated Value <input name="estimatedValue" type="number" min="0" step="1000" /></label>
+          <label>Source
+            <select name="source">
+              <option>Facebook</option>
+              <option>TikTok</option>
+              <option>Instagram</option>
+              <option>Referral</option>
+              <option>Google</option>
+              <option>Walk-in</option>
+              <option>Other</option>
+            </select>
+          </label>
+          <label>Status
+            <select name="status">
+              <option>New</option>
+              <option>Contacted</option>
+              <option>Qualified</option>
+              <option>Proposal</option>
+              <option>Won</option>
+              <option>Lost</option>
+            </select>
+          </label>
+          <label>Move Date <input name="moveDate" type="date" /></label>
+          <label class="span-2">Transport Details <textarea name="transportDetails"></textarea></label>
+          <label class="span-2">Notes <textarea name="notes"></textarea></label>
+        </div>
+        <menu>
+          <button value="cancel">Cancel</button>
+          <button id="save-lead-btn" value="default" class="primary">Save</button>
+        </menu>
+      </form>
+    </dialog>
+
+    <script src="/app.js"></script>
   </body>
 </html>
