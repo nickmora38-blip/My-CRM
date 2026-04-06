@@ -218,7 +218,7 @@ function readCustomerDocMeta(customerId) {
   return readJson(metaFile, []);
 }
 function writeCustomerDocMeta(customerId, meta) {
-  const metaFile = path.join(DOCUMENTS_DIR, customerId, 'metadata.json');
+  const metaFile = path.join(getCustomerDocDir(customerId), 'metadata.json');
   writeJson(metaFile, meta);
 }
 
@@ -1458,7 +1458,9 @@ app.post('/api/documents/:customerId/upload', (req, res) => {
 
   const { fileName, fileType, docCategory, data } = req.body;
   if (!fileName || !data) return res.status(400).json({ error: 'fileName and data are required' });
-  if (typeof data === 'string' && data.length > 14_000_000) {
+  // Max base64 string length for 10MB binary: 10 * 1024 * 1024 * (4/3) ≈ 14,000,000 chars
+  const MAX_UPLOAD_B64 = 14_000_000;
+  if (typeof data === 'string' && data.length > MAX_UPLOAD_B64) {
     return res.status(413).json({ error: 'File too large (max 10MB)' });
   }
 
@@ -1467,6 +1469,10 @@ app.post('/api/documents/:customerId/upload', (req, res) => {
   const docId = `doc_${crypto.randomUUID()}`;
   const docDir = getCustomerDocDir(customerId);
   const filePath = path.join(docDir, docId);
+  // Verify resolved path is within DOCUMENTS_DIR to prevent traversal
+  if (!path.resolve(filePath).startsWith(path.resolve(DOCUMENTS_DIR) + path.sep)) {
+    return res.status(400).json({ error: 'Invalid path' });
+  }
 
   try {
     fs.writeFileSync(filePath, Buffer.from(data, 'base64'));
@@ -1503,6 +1509,10 @@ app.delete('/api/documents/:customerId/:docId', (req, res) => {
   if (idx === -1) return res.status(404).json({ error: 'Document not found' });
 
   const filePath = path.join(DOCUMENTS_DIR, customerId, docId);
+  // Verify resolved path is within DOCUMENTS_DIR to prevent traversal
+  if (!path.resolve(filePath).startsWith(path.resolve(DOCUMENTS_DIR) + path.sep)) {
+    return res.status(400).json({ error: 'Invalid path' });
+  }
   if (fs.existsSync(filePath)) {
     try {
       fs.unlinkSync(filePath);
@@ -1528,6 +1538,10 @@ app.get('/api/documents/:customerId/:docId/download', (req, res) => {
   if (!doc) return res.status(404).json({ error: 'Document not found' });
 
   const filePath = path.join(DOCUMENTS_DIR, customerId, docId);
+  // Verify resolved path is within DOCUMENTS_DIR to prevent traversal
+  if (!path.resolve(filePath).startsWith(path.resolve(DOCUMENTS_DIR) + path.sep)) {
+    return res.status(400).json({ error: 'Invalid path' });
+  }
   if (!fs.existsSync(filePath)) return res.status(404).json({ error: 'File not found' });
 
   res.setHeader('Content-Disposition', `attachment; filename="${doc.fileName}"`);

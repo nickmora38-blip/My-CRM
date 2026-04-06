@@ -36,6 +36,7 @@ const state = {
   pendingLeadPayload: null,   // held during duplicate check
   pendingDuplicates: [],      // duplicates found during check
   emailTargetLeadId: null,
+  emailTargetType: null,
   editingTemplateId: null,
   editingUserId: null,
   contacts: [],
