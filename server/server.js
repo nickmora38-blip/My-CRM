@@ -14,6 +14,9 @@ const LEADS_FILE = path.join(DATA_DIR, 'leads.json');
 const USERS_FILE = path.join(DATA_DIR, 'users.json');
 const TEMPLATES_FILE = path.join(DATA_DIR, 'emailTemplates.json');
 const TASKS_FILE = path.join(DATA_DIR, 'tasks.json');
+const CONTACTS_FILE = path.join(DATA_DIR, 'contacts.json');
+const ACTIVE_CUSTOMERS_FILE = path.join(DATA_DIR, 'activeCustomers.json');
+const DOCUMENTS_DIR = path.join(DATA_DIR, 'documents');
 
 // Warn if running in production with default secret
 if (NODE_ENV === 'production' && process.env.JWT_SECRET === undefined) {
@@ -21,6 +24,13 @@ if (NODE_ENV === 'production' && process.env.JWT_SECRET === undefined) {
 }
 
 const PIPELINE_STAGES = ['New', 'Contacted', 'Qualified', 'Proposal', 'Won', 'Lost'];
+const CONTACT_PIPELINE_STAGES = ['Call Back Scheduled', 'Appointment Set', 'Application Sent'];
+const ACTIVE_CUSTOMER_STATUSES = [
+  'Contact Status', 'App Submitted', 'Approved', 'Pending Conditions', 'Ready to Close',
+  'Appraisal', 'Docs Ordered', 'Closed Pending Delivery', 'Delivered Pending Funding',
+  'Funded', 'Trimout Pending', 'Trimmed Out Pending Addl Work', 'Completed', 'Closed'
+];
+const VALID_LENDERS = ['21ST', 'CPM', 'Triad', 'CUHU', 'Cash', 'Other', 'CSL', 'Calcon'];
 const VALID_RESPONSE_STATUSES = ['answered', 'not_answered', 'left_vm', 'text'];
 const VALID_LEAD_STATUSES = ['pending_info', 'completing_application', 'appointment_set', 'answered'];
 const VALID_FINANCING = ['cash', 'finance', 'credit_repair'];
@@ -36,6 +46,9 @@ const PHASE1_HOURS = [7, 11, 15, 19]; // 7am, 11am, 3pm, 7pm
 // Ensure data directory exists
 if (!fs.existsSync(DATA_DIR)) {
   fs.mkdirSync(DATA_DIR, { recursive: true });
+}
+if (!fs.existsSync(DOCUMENTS_DIR)) {
+  fs.mkdirSync(DOCUMENTS_DIR, { recursive: true });
 }
 
 app.use(express.json());
@@ -181,6 +194,32 @@ function readTasks() {
 
 function writeTasks(tasks) {
   writeJson(TASKS_FILE, tasks);
+}
+
+function readContacts() {
+  return readJson(CONTACTS_FILE, []);
+}
+function writeContacts(contacts) {
+  writeJson(CONTACTS_FILE, contacts);
+}
+function readActiveCustomers() {
+  return readJson(ACTIVE_CUSTOMERS_FILE, []);
+}
+function writeActiveCustomers(customers) {
+  writeJson(ACTIVE_CUSTOMERS_FILE, customers);
+}
+function getCustomerDocDir(customerId) {
+  const dir = path.join(DOCUMENTS_DIR, customerId);
+  if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
+  return dir;
+}
+function readCustomerDocMeta(customerId) {
+  const metaFile = path.join(getCustomerDocDir(customerId), 'metadata.json');
+  return readJson(metaFile, []);
+}
+function writeCustomerDocMeta(customerId, meta) {
+  const metaFile = path.join(DOCUMENTS_DIR, customerId, 'metadata.json');
+  writeJson(metaFile, meta);
 }
 
 // ─── Auth middleware ──────────────────────────────────────────────────────────
@@ -1076,6 +1115,457 @@ app.put('/api/admin/leads/:id/transfer', (req, res) => {
   writeLeads(leads);
 
   res.json({ lead: leads[idx] });
+});
+
+// ─── Contacts routes ──────────────────────────────────────────────────────────
+
+app.use('/api/contacts', authMiddleware);
+
+// GET /api/contacts
+app.get('/api/contacts', (req, res) => {
+  const contacts = readContacts();
+  const users = readUsers();
+  const userRecord = Object.values(users).find((u) => u.id === req.user.sub);
+  const isAdmin = isAdminUser(userRecord);
+  const filtered = isAdmin ? contacts : contacts.filter((c) => c.owner === req.user.sub);
+  res.json({ contacts: filtered.sort((a, b) => String(b.updatedAt).localeCompare(String(a.updatedAt))) });
+});
+
+// GET /api/contacts/:id
+app.get('/api/contacts/:id', (req, res) => {
+  const contacts = readContacts();
+  const contact = contacts.find((c) => c.id === req.params.id);
+  if (!contact) return res.status(404).json({ error: 'Contact not found' });
+  res.json({ contact });
+});
+
+// POST /api/contacts — create from lead or new
+app.post('/api/contacts', (req, res) => {
+  const { fromLeadId, firstName, lastName, phone, email, homeType, route, notes, source } = req.body;
+  if (!firstName || !lastName) return res.status(400).json({ error: 'firstName and lastName are required' });
+
+  const users = readUsers();
+  const userRecord = Object.values(users).find((u) => u.id === req.user.sub);
+  const now = new Date().toISOString();
+
+  let leadHistory = null;
+  if (fromLeadId) {
+    const leads = readLeads();
+    const lead = leads.find((l) => l.id === fromLeadId);
+    if (lead) leadHistory = lead;
+  }
+
+  const contact = {
+    id: `contact_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
+    firstName: (firstName || '').trim(),
+    lastName: (lastName || '').trim(),
+    phone: (phone || '').trim(),
+    email: (email || '').trim().toLowerCase(),
+    homeType: (homeType || '').trim(),
+    route: (route || '').trim(),
+    notes: (notes || '').trim(),
+    source: (source || '').trim() || 'Other',
+    pipelineStatus: 'Call Back Scheduled',
+    owner: req.user.sub,
+    ownerName: userRecord ? userRecord.name : req.user.name,
+    fromLeadId: fromLeadId || null,
+    leadHistory: leadHistory || null,
+    emailsSent: [],
+    documents: [],
+    createdAt: now,
+    updatedAt: now
+  };
+
+  const contacts = readContacts();
+  contacts.unshift(contact);
+  writeContacts(contacts);
+
+  res.status(201).json({ contact });
+});
+
+// PUT /api/contacts/:id
+app.put('/api/contacts/:id', (req, res) => {
+  const contacts = readContacts();
+  const idx = contacts.findIndex((c) => c.id === req.params.id);
+  if (idx === -1) return res.status(404).json({ error: 'Contact not found' });
+
+  const contact = contacts[idx];
+  const users = readUsers();
+  const userRecord = Object.values(users).find((u) => u.id === req.user.sub);
+  const isAdmin = isAdminUser(userRecord);
+
+  if (contact.owner !== req.user.sub && !isAdmin) {
+    return res.status(403).json({ error: 'Only the contact owner can modify this record' });
+  }
+
+  const { firstName, lastName, phone, email, homeType, route, notes, source, pipelineStatus } = req.body;
+  const now = new Date().toISOString();
+
+  contacts[idx] = {
+    ...contact,
+    firstName: firstName !== undefined ? (firstName || '').trim() : contact.firstName,
+    lastName: lastName !== undefined ? (lastName || '').trim() : contact.lastName,
+    phone: phone !== undefined ? (phone || '').trim() : contact.phone,
+    email: email !== undefined ? (email || '').trim().toLowerCase() : contact.email,
+    homeType: homeType !== undefined ? (homeType || '').trim() : contact.homeType,
+    route: route !== undefined ? (route || '').trim() : contact.route,
+    notes: notes !== undefined ? (notes || '').trim() : contact.notes,
+    source: source !== undefined ? (source || '').trim() : contact.source,
+    pipelineStatus: pipelineStatus && CONTACT_PIPELINE_STAGES.includes(pipelineStatus) ? pipelineStatus : contact.pipelineStatus,
+    updatedAt: now
+  };
+
+  writeContacts(contacts);
+  res.json({ contact: contacts[idx] });
+});
+
+// DELETE /api/contacts/:id — admin only
+app.delete('/api/contacts/:id', (req, res) => {
+  const users = readUsers();
+  const userRecord = Object.values(users).find((u) => u.id === req.user.sub);
+  if (!isAdminUser(userRecord)) return res.status(403).json({ error: 'Only admins can delete contacts' });
+
+  const contacts = readContacts();
+  const idx = contacts.findIndex((c) => c.id === req.params.id);
+  if (idx === -1) return res.status(404).json({ error: 'Contact not found' });
+
+  contacts.splice(idx, 1);
+  writeContacts(contacts);
+  res.json({ success: true });
+});
+
+// POST /api/contacts/:id/send-email
+app.post('/api/contacts/:id/send-email', (req, res) => {
+  const contacts = readContacts();
+  const idx = contacts.findIndex((c) => c.id === req.params.id);
+  if (idx === -1) return res.status(404).json({ error: 'Contact not found' });
+
+  const { templateId, subject, body } = req.body;
+  if (!subject || !body) return res.status(400).json({ error: 'subject and body are required' });
+
+  const emailRecord = {
+    id: `email_${crypto.randomUUID()}`,
+    templateId: templateId || null,
+    subject,
+    body,
+    sentAt: new Date().toISOString(),
+    sentBy: req.user.sub
+  };
+
+  if (!Array.isArray(contacts[idx].emailsSent)) contacts[idx].emailsSent = [];
+  contacts[idx].emailsSent.push(emailRecord);
+  contacts[idx].updatedAt = new Date().toISOString();
+  writeContacts(contacts);
+
+  res.json({ email: emailRecord });
+});
+
+// POST /api/contacts/:id/promote — promote contact to active customer
+app.post('/api/contacts/:id/promote', (req, res) => {
+  const contacts = readContacts();
+  const idx = contacts.findIndex((c) => c.id === req.params.id);
+  if (idx === -1) return res.status(404).json({ error: 'Contact not found' });
+
+  const contact = contacts[idx];
+  const users = readUsers();
+  const userRecord = Object.values(users).find((u) => u.id === req.user.sub);
+  const isAdmin = isAdminUser(userRecord);
+
+  if (contact.owner !== req.user.sub && !isAdmin) {
+    return res.status(403).json({ error: 'Only the contact owner can promote this record' });
+  }
+
+  const now = new Date().toISOString();
+  const customer = {
+    id: `cust_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
+    firstName: contact.firstName,
+    lastName: contact.lastName,
+    phone: contact.phone,
+    email: contact.email,
+    homeType: contact.homeType,
+    route: contact.route,
+    notes: contact.notes,
+    source: contact.source,
+    owner: contact.owner,
+    ownerName: contact.ownerName,
+    fromContactId: contact.id,
+    fromLeadId: contact.fromLeadId || null,
+    status: 'App Submitted',
+    lender: null,
+    checklist: {
+      type: null,
+      orderStock: null,
+      factory: null,
+      modular: null,
+      swDwTw: null,
+      payStubs: false,
+      w2s: false,
+      vod: false,
+      voeVor: false,
+      bids: false,
+      lenderDoc: false,
+      deedLandContract: false,
+      siteInspection: false,
+      survey: false,
+      appraisal: false,
+      title: false,
+      address911: false,
+      specSheet: false,
+      cocs: false,
+      conditionsMet: false
+    },
+    estimatedValue: 0,
+    monthYear: `${new Date().toLocaleString('default', { month: 'long' })} ${new Date().getFullYear()}`,
+    emailsSent: contact.emailsSent || [],
+    createdAt: now,
+    updatedAt: now
+  };
+
+  const customers = readActiveCustomers();
+  customers.unshift(customer);
+  writeActiveCustomers(customers);
+
+  // Mark contact as promoted
+  contacts[idx].promotedToCustomer = customer.id;
+  contacts[idx].updatedAt = now;
+  writeContacts(contacts);
+
+  res.status(201).json({ customer });
+});
+
+// ─── Active Customers routes ──────────────────────────────────────────────────
+
+app.use('/api/active-customers', authMiddleware);
+
+// GET /api/active-customers
+app.get('/api/active-customers', (req, res) => {
+  const customers = readActiveCustomers();
+  const users = readUsers();
+  const userRecord = Object.values(users).find((u) => u.id === req.user.sub);
+  const isAdmin = isAdminUser(userRecord);
+  const filtered = isAdmin ? customers : customers.filter((c) => c.owner === req.user.sub);
+  res.json({ customers: filtered.sort((a, b) => String(b.updatedAt).localeCompare(String(a.updatedAt))) });
+});
+
+// GET /api/active-customers/:id
+app.get('/api/active-customers/:id', (req, res) => {
+  const customers = readActiveCustomers();
+  const customer = customers.find((c) => c.id === req.params.id);
+  if (!customer) return res.status(404).json({ error: 'Customer not found' });
+  res.json({ customer });
+});
+
+// PUT /api/active-customers/:id
+app.put('/api/active-customers/:id', (req, res) => {
+  const customers = readActiveCustomers();
+  const idx = customers.findIndex((c) => c.id === req.params.id);
+  if (idx === -1) return res.status(404).json({ error: 'Customer not found' });
+
+  const customer = customers[idx];
+  const users = readUsers();
+  const userRecord = Object.values(users).find((u) => u.id === req.user.sub);
+  const isAdmin = isAdminUser(userRecord);
+
+  if (customer.owner !== req.user.sub && !isAdmin) {
+    return res.status(403).json({ error: 'Only the customer owner can modify this record' });
+  }
+
+  const { status, lender, checklist, estimatedValue, notes, homeType, route, monthYear, firstName, lastName, phone, email } = req.body;
+  const now = new Date().toISOString();
+
+  customers[idx] = {
+    ...customer,
+    firstName: firstName !== undefined ? (firstName || '').trim() : customer.firstName,
+    lastName: lastName !== undefined ? (lastName || '').trim() : customer.lastName,
+    phone: phone !== undefined ? (phone || '').trim() : customer.phone,
+    email: email !== undefined ? (email || '').trim().toLowerCase() : customer.email,
+    homeType: homeType !== undefined ? (homeType || '').trim() : customer.homeType,
+    route: route !== undefined ? (route || '').trim() : customer.route,
+    notes: notes !== undefined ? (notes || '').trim() : customer.notes,
+    status: status && ACTIVE_CUSTOMER_STATUSES.includes(status) ? status : customer.status,
+    lender: lender && VALID_LENDERS.includes(lender) ? lender : (lender === '' ? null : customer.lender),
+    checklist: checklist && typeof checklist === 'object' ? { ...customer.checklist, ...checklist } : customer.checklist,
+    estimatedValue: estimatedValue !== undefined ? Number(estimatedValue) || 0 : customer.estimatedValue,
+    monthYear: monthYear || customer.monthYear,
+    updatedAt: now
+  };
+
+  writeActiveCustomers(customers);
+  res.json({ customer: customers[idx] });
+});
+
+// DELETE /api/active-customers/:id — admin only
+app.delete('/api/active-customers/:id', (req, res) => {
+  const users = readUsers();
+  const userRecord = Object.values(users).find((u) => u.id === req.user.sub);
+  if (!isAdminUser(userRecord)) return res.status(403).json({ error: 'Only admins can delete customers' });
+
+  const customers = readActiveCustomers();
+  const idx = customers.findIndex((c) => c.id === req.params.id);
+  if (idx === -1) return res.status(404).json({ error: 'Customer not found' });
+
+  customers.splice(idx, 1);
+  writeActiveCustomers(customers);
+  res.json({ success: true });
+});
+
+// POST /api/active-customers/:id/send-email
+app.post('/api/active-customers/:id/send-email', (req, res) => {
+  const customers = readActiveCustomers();
+  const idx = customers.findIndex((c) => c.id === req.params.id);
+  if (idx === -1) return res.status(404).json({ error: 'Customer not found' });
+
+  const { templateId, subject, body } = req.body;
+  if (!subject || !body) return res.status(400).json({ error: 'subject and body are required' });
+
+  const emailRecord = {
+    id: `email_${crypto.randomUUID()}`,
+    templateId: templateId || null,
+    subject,
+    body,
+    sentAt: new Date().toISOString(),
+    sentBy: req.user.sub
+  };
+
+  if (!Array.isArray(customers[idx].emailsSent)) customers[idx].emailsSent = [];
+  customers[idx].emailsSent.push(emailRecord);
+  customers[idx].updatedAt = new Date().toISOString();
+  writeActiveCustomers(customers);
+
+  res.json({ email: emailRecord });
+});
+
+// ─── Document routes ──────────────────────────────────────────────────────────
+
+app.use('/api/documents', authMiddleware);
+
+// GET /api/documents/:customerId — list documents
+app.get('/api/documents/:customerId', (req, res) => {
+  const { customerId } = req.params;
+  if (!/^[a-zA-Z0-9_-]+$/.test(customerId)) {
+    return res.status(400).json({ error: 'Invalid customer ID' });
+  }
+  const meta = readCustomerDocMeta(customerId);
+  res.json({ documents: meta });
+});
+
+// POST /api/documents/:customerId/upload — upload document (base64 JSON)
+app.post('/api/documents/:customerId/upload', (req, res) => {
+  const { customerId } = req.params;
+  if (!/^[a-zA-Z0-9_-]+$/.test(customerId)) {
+    return res.status(400).json({ error: 'Invalid customer ID' });
+  }
+
+  const { fileName, fileType, docCategory, data } = req.body;
+  if (!fileName || !data) return res.status(400).json({ error: 'fileName and data are required' });
+  if (typeof data === 'string' && data.length > 14_000_000) {
+    return res.status(413).json({ error: 'File too large (max 10MB)' });
+  }
+
+  const safeFileName = path.basename(fileName).replace(/[^a-zA-Z0-9._-]/g, '_');
+
+  const docId = `doc_${crypto.randomUUID()}`;
+  const docDir = getCustomerDocDir(customerId);
+  const filePath = path.join(docDir, docId);
+
+  try {
+    fs.writeFileSync(filePath, Buffer.from(data, 'base64'));
+  } catch (err) {
+    return res.status(500).json({ error: 'Failed to save file' });
+  }
+
+  const meta = readCustomerDocMeta(customerId);
+  const docRecord = {
+    id: docId,
+    fileName: safeFileName,
+    fileType: fileType || 'application/octet-stream',
+    docCategory: docCategory || 'Other',
+    size: Buffer.byteLength(data, 'base64'),
+    uploadedAt: new Date().toISOString(),
+    uploadedBy: req.user.sub,
+    uploadedByName: req.user.name
+  };
+  meta.push(docRecord);
+  writeCustomerDocMeta(customerId, meta);
+
+  res.status(201).json({ document: docRecord });
+});
+
+// DELETE /api/documents/:customerId/:docId
+app.delete('/api/documents/:customerId/:docId', (req, res) => {
+  const { customerId, docId } = req.params;
+  if (!/^[a-zA-Z0-9_-]+$/.test(customerId) || !/^[a-zA-Z0-9_-]+$/.test(docId)) {
+    return res.status(400).json({ error: 'Invalid ID' });
+  }
+
+  const meta = readCustomerDocMeta(customerId);
+  const idx = meta.findIndex((d) => d.id === docId);
+  if (idx === -1) return res.status(404).json({ error: 'Document not found' });
+
+  const filePath = path.join(DOCUMENTS_DIR, customerId, docId);
+  if (fs.existsSync(filePath)) {
+    try {
+      fs.unlinkSync(filePath);
+    } catch (err) {
+      console.error('Failed to delete document file:', err);
+    }
+  }
+
+  meta.splice(idx, 1);
+  writeCustomerDocMeta(customerId, meta);
+  res.json({ success: true });
+});
+
+// GET /api/documents/:customerId/:docId/download
+app.get('/api/documents/:customerId/:docId/download', (req, res) => {
+  const { customerId, docId } = req.params;
+  if (!/^[a-zA-Z0-9_-]+$/.test(customerId) || !/^[a-zA-Z0-9_-]+$/.test(docId)) {
+    return res.status(400).json({ error: 'Invalid ID' });
+  }
+
+  const meta = readCustomerDocMeta(customerId);
+  const doc = meta.find((d) => d.id === docId);
+  if (!doc) return res.status(404).json({ error: 'Document not found' });
+
+  const filePath = path.join(DOCUMENTS_DIR, customerId, docId);
+  if (!fs.existsSync(filePath)) return res.status(404).json({ error: 'File not found' });
+
+  res.setHeader('Content-Disposition', `attachment; filename="${doc.fileName}"`);
+  res.setHeader('Content-Type', doc.fileType || 'application/octet-stream');
+  res.sendFile(filePath);
+});
+
+// ─── Pipeline monthly report ──────────────────────────────────────────────────
+
+app.get('/api/pipeline/monthly', authMiddleware, (req, res) => {
+  const customers = readActiveCustomers();
+  const users = readUsers();
+  const userRecord = Object.values(users).find((u) => u.id === req.user.sub);
+  const isAdmin = isAdminUser(userRecord);
+
+  const visible = isAdmin ? customers : customers.filter((c) => c.owner === req.user.sub);
+
+  const monthMap = {};
+  visible.forEach((c) => {
+    const month = c.monthYear || 'Unknown';
+    if (!monthMap[month]) monthMap[month] = {};
+    const status = c.status || 'Unknown';
+    monthMap[month][status] = (monthMap[month][status] || 0) + 1;
+  });
+
+  const months = Object.keys(monthMap).sort((a, b) => {
+    const da = new Date(a + ' 1');
+    const db = new Date(b + ' 1');
+    return isNaN(db) - isNaN(da) || db - da;
+  });
+
+  res.json({
+    months: months.map((month) => ({
+      month,
+      statusCounts: monthMap[month],
+      total: Object.values(monthMap[month]).reduce((s, n) => s + n, 0)
+    }))
+  });
 });
 
 // ─── Health check ─────────────────────────────────────────────────────────────
