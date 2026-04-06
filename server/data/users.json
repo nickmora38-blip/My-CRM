@@ -3,14 +3,27 @@
     "id": "user-1",
     "email": "demo@crm.local",
     "name": "Demo User",
-    "passwordHash": "$2a$10$UyQOLeQV6bBRjmkARwd2BOWnsViIazZRwCutVxENfAqKNWr2zxybu",
-    "isAdmin": true
+    "isAdmin": true,
+    "role": "admin",
+    "active": true,
+    "passwordHash": "$2a$10$UyQOLeQV6bBRjmkARwd2BOWnsViIazZRwCutVxENfAqKNWr2zxybu"
   },
   "alex@crm.local": {
     "id": "user-2",
     "email": "alex@crm.local",
     "name": "Alex Morgan",
-    "passwordHash": "$2a$10$jNtYqxJ8rvK.YGkNNrrrEuG3aOg.y2Pnkdj0ojkO4wRjYyhaErYai",
-    "isAdmin": false
+    "isAdmin": false,
+    "role": "phc",
+    "active": true,
+    "passwordHash": "$2a$10$jNtYqxJ8rvK.YGkNNrrrEuG3aOg.y2Pnkdj0ojkO4wRjYyhaErYai"
+  },
+  "sarah@crm.local": {
+    "id": "user_1775444187994_mg2jzy",
+    "email": "sarah@crm.local",
+    "name": "Sarah Jones",
+    "isAdmin": false,
+    "role": "phc",
+    "active": true,
+    "passwordHash": "$2a$10$26eB0Hs/.v.pzzqsbdMCW.zmjWiESnjBXFvK6YDq3Wgjbs/j3Mb1."
   }
 }

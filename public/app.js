@@ -26,6 +26,7 @@ const state = {
   leads: [],
   templates: [],
   tasks: [],
+  users: [],
   view: 'list',
   sortBy: 'updatedAt',
   sortDir: 'desc',
@@ -33,8 +34,10 @@ const state = {
   editingLeadId: null,
   openStatusDropdown: null,
   pendingLeadPayload: null,   // held during duplicate check
+  pendingDuplicates: [],      // duplicates found during check
   emailTargetLeadId: null,
-  editingTemplateId: null
+  editingTemplateId: null,
+  editingUserId: null
 };
 
 const els = {
@@ -87,11 +90,16 @@ const els = {
   selectedTemplateIdInput: document.getElementById('selectedTemplateId-input'),
   // Duplicate modal
   dupModal: document.getElementById('dup-modal'),
-  dupInfo: document.getElementById('dup-info'),
+  dupComparison: document.getElementById('dup-comparison'),
+  dupPhcHint: document.getElementById('dup-phc-hint'),
   dupAdminSection: document.getElementById('dup-admin-section'),
   dupNote: document.getElementById('dup-note'),
+  dupOwnerSelectWrap: document.getElementById('dup-owner-select-wrap'),
+  dupOwnerDropdown: document.getElementById('dup-owner-dropdown'),
   dupRejectBtn: document.getElementById('dup-reject-btn'),
-  dupApproveBtn: document.getElementById('dup-approve-btn'),
+  dupAllowBtn: document.getElementById('dup-allow-btn'),
+  dupMergeBtn: document.getElementById('dup-merge-btn'),
+  dupOwnerBtn: document.getElementById('dup-owner-btn'),
   // Email modal
   emailModal: document.getElementById('email-modal'),
   emailModalTitle: document.getElementById('email-modal-title'),
@@ -108,7 +116,23 @@ const els = {
   tmplSubject: document.getElementById('tmpl-subject'),
   tmplBody: document.getElementById('tmpl-body'),
   tmplCancelBtn: document.getElementById('tmpl-cancel-btn'),
-  tmplSaveBtn: document.getElementById('tmpl-save-btn')
+  tmplSaveBtn: document.getElementById('tmpl-save-btn'),
+  // Users panel
+  usersBtn: document.getElementById('users-btn'),
+  usersPanel: document.getElementById('users-panel'),
+  usersList: document.getElementById('users-list'),
+  usersCloseBtn: document.getElementById('users-close-btn'),
+  addUserBtn: document.getElementById('add-user-btn'),
+  // User modal
+  userModal: document.getElementById('user-modal'),
+  userModalTitle: document.getElementById('user-modal-title'),
+  userName: document.getElementById('user-name'),
+  userEmail: document.getElementById('user-email'),
+  userPassword: document.getElementById('user-password'),
+  userPasswordWrap: document.getElementById('user-password-wrap'),
+  userRole: document.getElementById('user-role'),
+  userCancelBtn: document.getElementById('user-cancel-btn'),
+  userSaveBtn: document.getElementById('user-save-btn')
 };
 
 // ─── API helper ───────────────────────────────────────────────────────────────
@@ -188,6 +212,15 @@ async function loadTasks() {
   state.tasks = data.tasks || [];
 }
 
+async function loadUsers() {
+  try {
+    const data = await api('/api/admin/users');
+    state.users = data.users || [];
+  } catch {
+    state.users = [];
+  }
+}
+
 async function updateLead(id, patch) {
   const response = await api(`/api/leads/${id}`, { method: 'PUT', body: JSON.stringify(patch) });
   const idx = state.leads.findIndex((item) => item.id === id);
@@ -252,12 +285,14 @@ function createStatusPicker(leadId) {
 // ─── Table render ─────────────────────────────────────────────────────────────
 
 function renderTable(rows) {
+  const isAdmin = state.user && (state.user.isAdmin || state.user.role === 'admin');
   const table = document.createElement('table');
   table.innerHTML = `
     <thead>
       <tr>
         <th class="sortable" data-sort="contact">Contact${sortIndicator('contact')}</th>
-        <th>Owner</th>
+        <th>Entry User</th>
+        <th>Assigned To</th>
         <th>Home Type</th>
         <th>Route</th>
         <th class="sortable" data-sort="status">Stage${sortIndicator('status')}</th>
@@ -276,7 +311,7 @@ function renderTable(rows) {
 
   rows.forEach((lead) => {
     const isOwner = state.user && lead.leadOwner === state.user.id;
-    const isAdmin = state.user && state.user.isAdmin;
+    const isAdmin = state.user && (state.user.isAdmin || state.user.role === 'admin');
     const canEdit = isOwner || isAdmin;
 
     const recallCell = lead.isDead
@@ -287,11 +322,16 @@ function renderTable(rows) {
       ? '<span class="badge badge-orange">⏰ Recall</span>'
       : '';
 
+    const entryUser = lead.createdByName || lead.leadOwnerName || 'Unknown';
+    const assignedUser = lead.leadOwnerName || 'Unknown';
+    const lockedNote = !isAdmin && isOwner ? ' <span class="lock-chip" title="Locked to you">🔒</span>' : '';
+
     const tr = document.createElement('tr');
     if (lead.isDead) tr.style.opacity = '0.6';
     tr.innerHTML = `
       <td><a href="#" data-open="${escHtml(lead.id)}">${escHtml(lead.firstName)} ${escHtml(lead.lastName)}</a>${lead.isLongTerm ? ' <span class="badge badge-yellow" title="Long-Term">LT</span>' : ''}</td>
-      <td><span class="owner-chip ${isOwner ? 'owner-me' : ''}">${escHtml(lead.leadOwnerName || 'Unknown')}</span></td>
+      <td><span class="owner-chip">${escHtml(entryUser)}</span></td>
+      <td><span class="owner-chip ${isOwner ? 'owner-me' : ''}">${escHtml(assignedUser)}${lockedNote}</span></td>
       <td>${escHtml(lead.homeType || '-')}</td>
       <td>${escHtml(lead.route || '-')}</td>
       <td class="status-cell"></td>
@@ -361,6 +401,7 @@ function renderBoard(rows) {
     leads.forEach((lead) => {
       const card = document.createElement('article');
       card.className = 'lead-card';
+      const isAdmin = state.user && (state.user.isAdmin || state.user.role === 'admin');
       card.innerHTML = `
         <strong>${escHtml(lead.firstName)} ${escHtml(lead.lastName)}</strong>
         ${lead.isDead ? '<span class="badge badge-red">Dead</span>' : ''}
@@ -369,7 +410,8 @@ function renderBoard(rows) {
         <p>${escHtml(lead.homeType || 'Home type not set')}</p>
         <p>${escHtml(lead.route || 'No route yet')}</p>
         <p>${currency(lead.estimatedValue)}</p>
-        <p class="muted" style="font-size:0.8rem">Owner: ${escHtml(lead.leadOwnerName || '-')}</p>
+        <p class="muted" style="font-size:0.8rem">Entry: ${escHtml(lead.createdByName || lead.leadOwnerName || '-')}</p>
+        <p class="muted" style="font-size:0.8rem">Assigned: ${escHtml(lead.leadOwnerName || '-')}${state.user && lead.leadOwner === state.user.id ? ' 🔒' : ''}</p>
       `;
       card.addEventListener('click', () => nav(`/leads/${lead.id}`));
       col.appendChild(card);
@@ -386,7 +428,7 @@ function detailCard(title, body) {
 
 function renderLeadDetail(lead) {
   const isOwner = state.user && lead.leadOwner === state.user.id;
-  const isAdmin = state.user && state.user.isAdmin;
+  const isAdmin = state.user && (state.user.isAdmin || state.user.role === 'admin');
   const canEdit = isOwner || isAdmin;
 
   const pipelineButtons = PIPELINE.filter((s) => s !== 'Lost')
@@ -417,15 +459,15 @@ function renderLeadDetail(lead) {
     <div class="toolbar">
       <div>
         <h2>${escHtml(lead.firstName)} ${escHtml(lead.lastName)}</h2>
-        <p class="muted">${escHtml(lead.homeType || 'Lead profile')} &nbsp;|&nbsp; Owner: <strong>${escHtml(lead.leadOwnerName || 'Unknown')}</strong> ${isOwner ? '(You)' : ''}</p>
+        <p class="muted">${escHtml(lead.homeType || 'Lead profile')} &nbsp;|&nbsp; Assigned: <strong>${escHtml(lead.leadOwnerName || 'Unknown')}</strong> ${isOwner ? '(You 🔒)' : ''}</p>
       </div>
       <div class="toolbar-actions">
         <button id="back-btn">← Back</button>
         ${canEdit ? '<button id="edit-btn">✏️ Edit</button>' : ''}
         <button id="send-email-btn" class="primary">✉️ Send Email</button>
         ${canEdit ? '<button id="record-contact-btn">📞 Record Contact</button>' : ''}
-        ${canEdit ? '<button id="delete-btn" class="danger-btn">🗑️ Delete</button>' : ''}
-        ${isAdmin ? `<button id="admin-transfer-btn">🔁 Transfer</button>` : ''}
+        ${isAdmin ? '<button id="delete-btn" class="danger-btn">🗑️ Delete</button>' : ''}
+        ${isAdmin ? `<button id="admin-transfer-btn">🔁 Reassign</button>` : ''}
       </div>
     </div>
 
@@ -439,7 +481,8 @@ function renderLeadDetail(lead) {
         <p><strong>Phone:</strong> ${escHtml(lead.phone || '-')}</p>
         <p><strong>Email:</strong> ${escHtml(lead.email || '-')}</p>
         <p><strong>Source:</strong> ${escHtml(lead.source || '-')}</p>
-        <p><strong>Lead Owner:</strong> ${escHtml(lead.leadOwnerName || '-')} ${isOwner ? '<span class="badge badge-green">You</span>' : ''}</p>
+        <p><strong>Entry User:</strong> ${escHtml(lead.createdByName || lead.leadOwnerName || '-')} <span class="muted" style="font-size:0.8rem">(original submitter)</span></p>
+        <p><strong>Assigned To:</strong> ${escHtml(lead.leadOwnerName || '-')} ${isOwner ? '<span class="badge badge-green">🔒 You</span>' : ''}</p>
       `)}
       ${detailCard('Response & Lead Status', `
         <p><strong>Response:</strong> ${responseStatusBadge(lead.responseStatus) || '<span class="muted">Not set</span>'}</p>
@@ -476,17 +519,20 @@ function renderLeadDetail(lead) {
   els.detailView.querySelector('#back-btn').addEventListener('click', () => nav('/'));
   if (canEdit) {
     els.detailView.querySelector('#edit-btn').addEventListener('click', () => openLeadModal(lead));
-    els.detailView.querySelector('#delete-btn').addEventListener('click', async () => {
-      if (!window.confirm('Delete this lead? This cannot be undone.')) return;
-      await api(`/api/leads/${lead.id}`, { method: 'DELETE' });
-      await loadLeads();
-      nav('/');
-    });
     els.detailView.querySelector('#record-contact-btn').addEventListener('click', async () => {
       await api(`/api/leads/${lead.id}`, { method: 'PUT', body: JSON.stringify({ recordContactAttempt: true, firstName: lead.firstName, lastName: lead.lastName }) });
       await loadLeads();
       const updated = state.leads.find((l) => l.id === lead.id);
       if (updated) renderLeadDetail(updated);
+    });
+  }
+
+  if (isAdmin) {
+    els.detailView.querySelector('#delete-btn').addEventListener('click', async () => {
+      if (!window.confirm('Delete this lead? This cannot be undone.')) return;
+      await api(`/api/leads/${lead.id}`, { method: 'DELETE' });
+      await loadLeads();
+      nav('/');
     });
   }
 
@@ -497,7 +543,7 @@ function renderLeadDetail(lead) {
       try {
         const usersData = await api('/api/admin/users');
         const opts = usersData.users.map((u) => `${u.id}: ${u.name} (${u.email})`).join('\n');
-        const choice = window.prompt(`Enter user ID to transfer lead to:\n${opts}`);
+        const choice = window.prompt(`Enter user ID to reassign lead to:\n${opts}`);
         if (!choice) return;
         const newOwnerId = choice.trim();
         await api(`/api/admin/leads/${lead.id}/transfer`, { method: 'PUT', body: JSON.stringify({ newOwnerId }) });
@@ -558,9 +604,13 @@ function render() {
   }
   els.loginPanel.classList.add('hidden');
   els.appPanel.classList.remove('hidden');
+  const isAdmin = state.user && (state.user.isAdmin || state.user.role === 'admin');
+  const roleLabel = isAdmin ? '🔑 Admin' : '👤 PHC';
   els.userLine.textContent = state.user
-    ? `${state.user.name} (${state.user.email})${state.user.isAdmin ? ' 🔑 Admin' : ''}`
+    ? `${state.user.name} (${state.user.email}) — ${roleLabel}`
     : '';
+  // Show admin-only buttons
+  if (els.usersBtn) els.usersBtn.classList.toggle('hidden', !isAdmin);
   if (isDetailRoute()) renderDetailPage();
   else renderListPage();
 }
@@ -646,7 +696,105 @@ function renderTemplatesPanel() {
   });
 }
 
-// ─── Lead modal ───────────────────────────────────────────────────────────────
+// ─── Users panel ──────────────────────────────────────────────────────────────
+
+function renderUsersPanel() {
+  els.usersList.innerHTML = '';
+  if (state.users.length === 0) {
+    els.usersList.innerHTML = '<p class="muted" style="padding:12px">No users found.</p>';
+    return;
+  }
+  state.users.forEach((user) => {
+    const isSelf = state.user && user.id === state.user.id;
+    const row = document.createElement('div');
+    row.className = 'task-row';
+    const roleLabel = user.role === 'admin' ? '🔑 Admin' : '👤 PHC';
+    const statusLabel = user.active !== false ? '<span class="badge badge-green">Active</span>' : '<span class="badge badge-red">Inactive</span>';
+    row.innerHTML = `
+      <div class="task-info" style="flex:1">
+        <strong>${escHtml(user.name)}</strong> ${statusLabel} <span class="badge badge-blue">${roleLabel}</span>
+        <p class="muted" style="font-size:0.85rem;margin:4px 0 0">${escHtml(user.email)}${isSelf ? ' <em>(You)</em>' : ''}</p>
+      </div>
+      <div class="toolbar-actions" style="gap:6px">
+        <button type="button" data-edit-user="${escHtml(user.id)}" style="font-size:0.8rem">✏️ Edit</button>
+        ${!isSelf ? `<button type="button" data-del-user="${escHtml(user.id)}" class="danger-btn" style="font-size:0.8rem">🗑️ Delete</button>` : ''}
+      </div>
+    `;
+    row.querySelector('[data-edit-user]').addEventListener('click', () => openUserModal(user));
+    const delBtn = row.querySelector('[data-del-user]');
+    if (delBtn) {
+      delBtn.addEventListener('click', async () => {
+        if (!window.confirm(`Delete user "${user.name}"? This cannot be undone.`)) return;
+        try {
+          await api(`/api/admin/users/${user.id}`, { method: 'DELETE' });
+          await loadUsers();
+          renderUsersPanel();
+        } catch (err) {
+          alert(err.message);
+        }
+      });
+    }
+    els.usersList.appendChild(row);
+  });
+}
+
+function openUserModal(user = null) {
+  state.editingUserId = user ? user.id : null;
+  els.userModalTitle.textContent = user ? 'Edit User' : 'Add User';
+  els.userName.value = user ? user.name : '';
+  els.userEmail.value = user ? user.email : '';
+  els.userPassword.value = '';
+  els.userRole.value = user ? (user.role || 'phc') : 'phc';
+  // Hide password field when editing (optional password change)
+  if (user) {
+    els.userPasswordWrap.querySelector('input').placeholder = 'Leave blank to keep current password';
+    els.userPasswordWrap.firstChild.textContent = 'New Password (optional) ';
+  } else {
+    els.userPasswordWrap.querySelector('input').placeholder = 'At least 6 characters';
+    els.userPasswordWrap.firstChild.textContent = 'Password * ';
+  }
+  els.userModal.showModal();
+}
+
+els.userCancelBtn.addEventListener('click', () => els.userModal.close());
+
+els.userSaveBtn.addEventListener('click', async () => {
+  const name = els.userName.value.trim();
+  const email = els.userEmail.value.trim();
+  const password = els.userPassword.value;
+  const role = els.userRole.value;
+
+  if (state.editingUserId) {
+    // Edit existing user
+    const patch = { role };
+    if (name) patch.name = name;
+    if (password && password.length >= 6) patch.password = password;
+    else if (password && password.length > 0 && password.length < 6) {
+      alert('Password must be at least 6 characters.');
+      return;
+    }
+    try {
+      await api(`/api/admin/users/${state.editingUserId}`, { method: 'PUT', body: JSON.stringify(patch) });
+      await loadUsers();
+      els.userModal.close();
+      renderUsersPanel();
+    } catch (err) {
+      alert(err.message);
+    }
+  } else {
+    // Create new user
+    if (!name || !email || !password) { alert('Name, email, and password are required.'); return; }
+    if (password.length < 6) { alert('Password must be at least 6 characters.'); return; }
+    try {
+      await api('/api/admin/users', { method: 'POST', body: JSON.stringify({ name, email, password, role }) });
+      await loadUsers();
+      els.userModal.close();
+      renderUsersPanel();
+    } catch (err) {
+      alert(err.message);
+    }
+  }
+});
 
 function populateTemplatePicker() {
   els.templatePicker.innerHTML = '';
@@ -819,7 +967,9 @@ async function submitLeadForm() {
       if (dupCheck.duplicates && dupCheck.duplicates.length > 0) {
         els.leadModal.close();
         state.pendingLeadPayload = payload;
-        openDuplicateModal(dupCheck.duplicates);
+        // Load users if not loaded yet (for the owner dropdown in dup modal)
+        if (state.users.length === 0) await loadUsers();
+        openDuplicateModal(dupCheck.duplicates, payload);
         return;
       }
       const result = await api('/api/leads', { method: 'POST', body: JSON.stringify(payload) });
@@ -854,46 +1004,141 @@ async function sendEmailFromTemplate(lead, templateId) {
 
 // ─── Duplicate modal ──────────────────────────────────────────────────────────
 
-function openDuplicateModal(duplicates) {
-  els.dupInfo.innerHTML = duplicates.map((d) => `
-    <div class="dup-entry">
-      <strong>${escHtml(d.firstName)} ${escHtml(d.lastName)}</strong>
-      <span class="muted"> — ${escHtml(d.email || '-')} | ${escHtml(d.phone || '-')}</span><br>
-      <span class="muted" style="font-size:0.85rem">Owner: ${escHtml(d.leadOwnerName || 'Unknown')} &nbsp;|&nbsp; Created: ${new Date(d.createdAt).toLocaleDateString()}</span>
-    </div>
-  `).join('');
+function openDuplicateModal(duplicates, newLeadData) {
+  state.pendingDuplicates = duplicates;
+  const isAdmin = state.user && (state.user.isAdmin || state.user.role === 'admin');
 
-  const isAdmin = state.user && state.user.isAdmin;
+  // Build side-by-side comparison for the first duplicate
+  const existing = duplicates[0];
+  const newLead = newLeadData || state.pendingLeadPayload || {};
+
+  const fields = [
+    ['First Name', existing.firstName, newLead.firstName],
+    ['Last Name', existing.lastName, newLead.lastName],
+    ['Phone', existing.phone, newLead.phone],
+    ['Email', existing.email, newLead.email],
+    ['Home Type', existing.homeType, newLead.homeType],
+    ['Route', existing.route, newLead.route],
+    ['Source', existing.source, newLead.source],
+    ['Entry User', existing.leadOwnerName, 'You'],
+  ];
+
+  const tableRows = fields.map(([label, existVal, newVal]) => {
+    const diff = String(existVal || '').trim().toLowerCase() !== String(newVal || '').trim().toLowerCase();
+    return `<tr ${diff ? 'class="dup-diff"' : ''}>
+      <td class="dup-label">${escHtml(label)}</td>
+      <td>${escHtml(existVal || '-')}</td>
+      <td>${escHtml(newVal || '-')}</td>
+    </tr>`;
+  }).join('');
+
+  const moreCount = duplicates.length > 1 ? `<p class="muted" style="font-size:0.85rem;margin-top:8px">+${duplicates.length - 1} more duplicate(s) found.</p>` : '';
+
+  els.dupComparison.innerHTML = `
+    <table class="dup-table">
+      <thead><tr><th>Field</th><th>Existing Lead</th><th>New Entry</th></tr></thead>
+      <tbody>${tableRows}</tbody>
+    </table>
+    ${moreCount}
+  `;
+
+  // Show/hide admin section
+  els.dupPhcHint.classList.toggle('hidden', isAdmin);
   els.dupAdminSection.classList.toggle('hidden', !isAdmin);
-  els.dupApproveBtn.classList.toggle('hidden', !isAdmin);
+  els.dupAllowBtn.classList.toggle('hidden', !isAdmin);
+  els.dupMergeBtn.classList.toggle('hidden', !isAdmin);
+  els.dupOwnerBtn.classList.toggle('hidden', !isAdmin);
+  els.dupOwnerSelectWrap.classList.add('hidden');
 
+  // Populate owner dropdown
+  if (isAdmin) {
+    els.dupOwnerDropdown.innerHTML = '';
+    (state.users.length ? state.users : []).forEach((u) => {
+      const opt = document.createElement('option');
+      opt.value = u.id;
+      opt.textContent = `${u.name} (${u.email})`;
+      els.dupOwnerDropdown.appendChild(opt);
+    });
+  }
+
+  els.dupNote.value = '';
   els.dupModal.showModal();
 }
 
 els.dupRejectBtn.addEventListener('click', () => {
   state.pendingLeadPayload = null;
+  state.pendingDuplicates = [];
   els.dupModal.close();
 });
 
-els.dupApproveBtn.addEventListener('click', async () => {
+els.dupAllowBtn.addEventListener('click', async () => {
   if (!state.pendingLeadPayload) return;
   const note = els.dupNote.value.trim();
   try {
     const result = await api('/api/admin/approve-duplicate', {
       method: 'POST',
-      body: JSON.stringify({ approved: true, pendingLeadData: state.pendingLeadPayload, note: note || 'Admin approved duplicate entry' })
+      body: JSON.stringify({ action: 'allow', pendingLeadData: state.pendingLeadPayload, note: note || 'Admin approved duplicate entry' })
     });
     state.leads.unshift(result.lead);
 
-    // Send initial email if template was selected
     const tmplId = els.selectedTemplateIdInput.value;
     if (tmplId) await sendEmailFromTemplate(result.lead, tmplId);
 
     state.pendingLeadPayload = null;
+    state.pendingDuplicates = [];
     els.dupModal.close();
     render();
   } catch (err) {
     alert(err.message);
+  }
+});
+
+els.dupMergeBtn.addEventListener('click', async () => {
+  const existing = state.pendingDuplicates[0];
+  if (!existing) return;
+  const note = els.dupNote.value.trim();
+  try {
+    await api('/api/admin/approve-duplicate', {
+      method: 'POST',
+      body: JSON.stringify({ action: 'merge', existingLeadId: existing.id, pendingLeadData: state.pendingLeadPayload, note: note || 'Admin merged duplicate entry' })
+    });
+    await loadLeads();
+    state.pendingLeadPayload = null;
+    state.pendingDuplicates = [];
+    els.dupModal.close();
+    render();
+  } catch (err) {
+    alert(err.message);
+  }
+});
+
+els.dupOwnerBtn.addEventListener('click', async () => {
+  const existing = state.pendingDuplicates[0];
+  if (!existing) return;
+
+  // Toggle owner select visibility
+  const isVisible = !els.dupOwnerSelectWrap.classList.contains('hidden');
+  if (isVisible) {
+    // Confirm the action
+    const targetUserId = els.dupOwnerDropdown.value;
+    if (!targetUserId) { alert('Please select a user.'); return; }
+    const note = els.dupNote.value.trim();
+    try {
+      await api('/api/admin/approve-duplicate', {
+        method: 'POST',
+        body: JSON.stringify({ action: 'change_owner', existingLeadId: existing.id, targetUserId, note: note || 'Admin changed lead owner' })
+      });
+      await loadLeads();
+      state.pendingLeadPayload = null;
+      state.pendingDuplicates = [];
+      els.dupModal.close();
+      render();
+    } catch (err) {
+      alert(err.message);
+    }
+  } else {
+    els.dupOwnerSelectWrap.classList.remove('hidden');
+    els.dupOwnerBtn.textContent = '✓ Confirm Owner Change';
   }
 });
 
@@ -1028,7 +1273,10 @@ async function initializeAuthedState() {
   try {
     const me = await api('/api/auth/me');
     state.user = me.user;
-    await Promise.all([loadLeads(), loadTemplates(), loadTasks()]);
+    const isAdmin = me.user && (me.user.isAdmin || me.user.role === 'admin');
+    const loaders = [loadLeads(), loadTemplates(), loadTasks()];
+    if (isAdmin) loaders.push(loadUsers());
+    await Promise.all(loaders);
     render();
   } catch (error) {
     state.token = '';
@@ -1048,7 +1296,10 @@ els.loginForm.addEventListener('submit', async (event) => {
     state.token = result.token;
     state.user = result.user;
     localStorage.setItem('crm_token', state.token);
-    await Promise.all([loadLeads(), loadTemplates(), loadTasks()]);
+    const isAdmin = result.user && (result.user.isAdmin || result.user.role === 'admin');
+    const loaders = [loadLeads(), loadTemplates(), loadTasks()];
+    if (isAdmin) loaders.push(loadUsers());
+    await Promise.all(loaders);
     nav('/');
   } catch (error) { alert(error.message); }
 });
@@ -1061,7 +1312,10 @@ els.registerForm.addEventListener('submit', async (event) => {
     state.token = result.token;
     state.user = result.user;
     localStorage.setItem('crm_token', state.token);
-    await Promise.all([loadLeads(), loadTemplates(), loadTasks()]);
+    const isAdmin = result.user && (result.user.isAdmin || result.user.role === 'admin');
+    const loaders = [loadLeads(), loadTemplates(), loadTasks()];
+    if (isAdmin) loaders.push(loadUsers());
+    await Promise.all(loaders);
     nav('/');
   } catch (error) { alert(error.message); }
 });
@@ -1099,6 +1353,16 @@ els.templatesBtn.addEventListener('click', async () => {
 });
 els.templatesCloseBtn.addEventListener('click', () => els.templatesPanel.classList.add('hidden'));
 els.newTemplateBtn.addEventListener('click', () => openTemplateModal());
+
+els.usersBtn.addEventListener('click', async () => {
+  await loadUsers();
+  renderUsersPanel();
+  els.usersPanel.classList.toggle('hidden');
+  els.tasksPanel.classList.add('hidden');
+  els.templatesPanel.classList.add('hidden');
+});
+els.usersCloseBtn.addEventListener('click', () => els.usersPanel.classList.add('hidden'));
+els.addUserBtn.addEventListener('click', () => openUserModal());
 
 els.listToggle.addEventListener('click', () => { state.view = 'list'; render(); });
 els.boardToggle.addEventListener('click', () => { state.view = 'board'; render(); });
