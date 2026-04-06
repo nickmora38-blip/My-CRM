@@ -712,13 +712,8 @@ app.put('/api/leads/:id', (req, res) => {
   res.json({ lead: leads[idx] });
 });
 
-// DELETE /api/leads/:id — only lead owner (or admin) can delete
+// DELETE /api/leads/:id — only admins can delete leads
 app.delete('/api/leads/:id', (req, res) => {
-  const leads = readLeads();
-  const idx = leads.findIndex((l) => l.id === req.params.id);
-  if (idx === -1) return res.status(404).json({ error: 'Lead not found' });
-
-  const lead = leads[idx];
   const users = readUsers();
   const userRecord = Object.values(users).find((u) => u.id === req.user.sub);
   const isAdmin = isAdminUser(userRecord);
@@ -727,6 +722,10 @@ app.delete('/api/leads/:id', (req, res) => {
   if (!isAdmin) {
     return res.status(403).json({ error: 'Only admins can delete leads' });
   }
+
+  const leads = readLeads();
+  const idx = leads.findIndex((l) => l.id === req.params.id);
+  if (idx === -1) return res.status(404).json({ error: 'Lead not found' });
 
   leads.splice(idx, 1);
   writeLeads(leads);
