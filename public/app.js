@@ -47,7 +47,10 @@ const state = {
   editingCustomerId: null,
   docUploadTargetId: null,
   docUploadTargetType: null,
-  pipelineActiveMonth: null
+  pipelineActiveMonth: null,
+  pipelineFilterStatus: '',
+  pipelineFilterLender: '',
+  pipelineMonthsData: []
 };
 
 const els = {
@@ -162,6 +165,9 @@ const els = {
   pipelineCloseBtn: document.getElementById('pipeline-close-btn'),
   pipelineMonthTabs: document.getElementById('pipeline-month-tabs'),
   pipelineReportContent: document.getElementById('pipeline-report-content'),
+  pipelineFilterStatus: document.getElementById('pipeline-filter-status'),
+  pipelineFilterLender: document.getElementById('pipeline-filter-lender'),
+  pipelineExportCsvBtn: document.getElementById('pipeline-export-csv-btn'),
   // Contact modal
   contactModal: document.getElementById('contact-modal'),
   contactModalTitle: document.getElementById('contact-modal-title'),
@@ -1794,7 +1800,7 @@ function renderActiveCustomerDetailModal(customer) {
             </select>
           </label>
         </div>
-        <div>
+        <div style="margin-bottom:10px">
           <label><strong>Approved for Financing — Lender</strong>
             <select id="ac-lender-select" ${!canEdit ? 'disabled' : ''} style="display:block;margin-top:4px;width:100%">
               <option value="">— No Lender Selected —</option>
@@ -1802,9 +1808,56 @@ function renderActiveCustomerDetailModal(customer) {
             </select>
           </label>
         </div>
+        <div style="margin-bottom:10px">
+          <label><strong>Loan Type</strong>
+            <select id="ac-loan-type-select" ${!canEdit ? 'disabled' : ''} style="display:block;margin-top:4px;width:100%">
+              <option value="">— Select Loan Type —</option>
+              ${['Chattel', 'Cash', 'FHA', 'LH'].map((lt) => `<option value="${escHtml(lt)}" ${customer.loanType === lt ? 'selected' : ''}>${escHtml(lt)}</option>`).join('')}
+            </select>
+          </label>
+        </div>
         ${canEdit ? `<button type="button" id="ac-save-status-btn" class="primary" style="margin-top:10px;width:100%">Save Status &amp; Lender</button>` : ''}
       </article>
     </div>
+
+    <article class="card" style="margin-bottom:16px">
+      <h4>Home &amp; Deal Info</h4>
+      <div class="detail-grid">
+        <div>
+          <label><strong>Model Name</strong>
+            <input type="text" id="ac-model-name" value="${escHtml(customer.modelName || '')}" ${!canEdit ? 'disabled' : ''} style="display:block;margin-top:4px;width:100%" />
+          </label>
+        </div>
+        <div>
+          <label><strong>Model Factory</strong>
+            <input type="text" id="ac-model-factory" value="${escHtml(customer.modelFactory || '')}" ${!canEdit ? 'disabled' : ''} style="display:block;margin-top:4px;width:100%" />
+          </label>
+        </div>
+        <div>
+          <label><strong>Home Name</strong>
+            <input type="text" id="ac-home-name" value="${escHtml(customer.homeName || '')}" ${!canEdit ? 'disabled' : ''} style="display:block;margin-top:4px;width:100%" />
+          </label>
+        </div>
+        <div>
+          <label><strong>Est. Gross Profit ($)</strong>
+            <input type="number" id="ac-est-gross-profit" value="${escHtml(String(customer.estGrossProfit || 0))}" ${!canEdit ? 'disabled' : ''} style="display:block;margin-top:4px;width:100%" min="0" step="100" />
+          </label>
+        </div>
+        <div>
+          <label style="display:flex;align-items:center;gap:8px;margin-top:18px">
+            <input type="checkbox" id="ac-ordered" ${customer.ordered ? 'checked' : ''} ${!canEdit ? 'disabled' : ''} />
+            <strong>Ordered</strong>
+          </label>
+        </div>
+        <div>
+          <label style="display:flex;align-items:center;gap:8px;margin-top:18px">
+            <input type="checkbox" id="ac-specced" ${customer.specced ? 'checked' : ''} ${!canEdit ? 'disabled' : ''} />
+            <strong>Spec'd</strong>
+          </label>
+        </div>
+      </div>
+      ${canEdit ? `<button type="button" id="ac-save-deal-info-btn" class="primary" style="margin-top:12px">Save Deal Info</button>` : ''}
+    </article>
 
     <article class="card" style="margin-bottom:16px">
       <h4>Detailed Items Checklist</h4>
@@ -1860,13 +1913,36 @@ function renderActiveCustomerDetailModal(customer) {
     saveStatusBtn.addEventListener('click', async () => {
       const status = els.acDetailContent.querySelector('#ac-status-select').value;
       const lender = els.acDetailContent.querySelector('#ac-lender-select').value;
+      const loanType = els.acDetailContent.querySelector('#ac-loan-type-select').value;
       try {
-        await api(`/api/active-customers/${customer.id}`, { method: 'PUT', body: JSON.stringify({ status, lender }) });
+        await api(`/api/active-customers/${customer.id}`, { method: 'PUT', body: JSON.stringify({ status, lender, loanType }) });
         await loadActiveCustomers();
         const updated = state.activeCustomers.find((c) => c.id === customer.id);
         if (updated) renderActiveCustomerDetailModal(updated);
         renderActiveCustomersPanel();
         alert('Status and lender saved!');
+      } catch (err) {
+        alert(err.message);
+      }
+    });
+  }
+
+  const saveDealInfoBtn = els.acDetailContent.querySelector('#ac-save-deal-info-btn');
+  if (saveDealInfoBtn) {
+    saveDealInfoBtn.addEventListener('click', async () => {
+      const modelName = els.acDetailContent.querySelector('#ac-model-name').value;
+      const modelFactory = els.acDetailContent.querySelector('#ac-model-factory').value;
+      const homeName = els.acDetailContent.querySelector('#ac-home-name').value;
+      const estGrossProfit = els.acDetailContent.querySelector('#ac-est-gross-profit').value;
+      const ordered = els.acDetailContent.querySelector('#ac-ordered').checked;
+      const specced = els.acDetailContent.querySelector('#ac-specced').checked;
+      try {
+        await api(`/api/active-customers/${customer.id}`, { method: 'PUT', body: JSON.stringify({ modelName, modelFactory, homeName, estGrossProfit: Number(estGrossProfit) || 0, ordered, specced }) });
+        await loadActiveCustomers();
+        const updated = state.activeCustomers.find((c) => c.id === customer.id);
+        if (updated) renderActiveCustomerDetailModal(updated);
+        renderActiveCustomersPanel();
+        alert('Deal info saved!');
       } catch (err) {
         alert(err.message);
       }
@@ -2021,88 +2097,181 @@ els.docUploadSaveBtn.addEventListener('click', async () => {
   reader.readAsDataURL(file);
 });
 
-// ─── Pipeline Report ──────────────────────────────────────────────────────────
+// ─── Advanced Pipeline Report ─────────────────────────────────────────────────
 
 async function renderPipelineReport() {
   try {
-    const data = await api('/api/pipeline/monthly');
-    const months = data.months || [];
+    const data = await api('/api/pipeline/advanced-report');
+    state.pipelineMonthsData = data.months || [];
 
     els.pipelineMonthTabs.innerHTML = '';
     els.pipelineReportContent.innerHTML = '';
 
-    if (months.length === 0) {
+    if (state.pipelineMonthsData.length === 0) {
       els.pipelineReportContent.innerHTML = '<p class="muted" style="padding:12px">No active customer data yet. Promote contacts to active customers to see pipeline data here.</p>';
       return;
     }
 
-    if (!state.pipelineActiveMonth || !months.find((m) => m.month === state.pipelineActiveMonth)) {
-      state.pipelineActiveMonth = months[0].month;
+    if (!state.pipelineActiveMonth || !state.pipelineMonthsData.find((m) => m.month === state.pipelineActiveMonth)) {
+      state.pipelineActiveMonth = state.pipelineMonthsData[0].month;
     }
 
-    months.forEach((m) => {
+    state.pipelineMonthsData.forEach((m) => {
       const tab = document.createElement('span');
       tab.className = `pipe-tab${m.month === state.pipelineActiveMonth ? ' active' : ''}`;
-      tab.textContent = m.month;
+      tab.textContent = `${m.month} (${m.total})`;
       tab.addEventListener('click', () => {
         state.pipelineActiveMonth = m.month;
-        renderPipelineMonthContent(months);
-        els.pipelineMonthTabs.querySelectorAll('.pipe-tab').forEach((t) => t.classList.toggle('active', t.textContent === m.month));
+        renderPipelineMonthContent();
+        els.pipelineMonthTabs.querySelectorAll('.pipe-tab').forEach((t) => t.classList.toggle('active', t === tab));
       });
       els.pipelineMonthTabs.appendChild(tab);
     });
 
-    renderPipelineMonthContent(months);
+    renderPipelineMonthContent();
   } catch (err) {
     els.pipelineReportContent.innerHTML = `<p class="muted">Failed to load pipeline: ${escHtml(err.message)}</p>`;
   }
 }
 
-function renderPipelineMonthContent(months) {
-  const monthData = months.find((m) => m.month === state.pipelineActiveMonth);
+function getPipelineRowColor(status) {
+  const overdue = ['App Submitted', 'Approved', 'Pending Conditions'];
+  const atRisk = ['Ready to Close', 'Appraisal', 'Docs Ordered', 'Trimout Pending', 'Trimmed Out Pending Addl Work'];
+  const onTrack = ['Closed Pending Delivery', 'Delivered Pending Funding', 'Funded', 'Completed', 'Closed'];
+  if (overdue.includes(status)) return 'pipeline-row-red';
+  if (atRisk.includes(status)) return 'pipeline-row-yellow';
+  if (onTrack.includes(status)) return 'pipeline-row-green';
+  return '';
+}
+
+function exportPipelineCsv() {
+  const allCustomers = state.pipelineMonthsData.flatMap((m) => m.customers);
+  const headers = [
+    'Name', 'Phone', 'Status', 'Lender', 'Loan Type', 'Model Name', 'Model Factory', 'Home Name',
+    'Ordered', "Spec'd", 'Est. Gross Profit', 'Proj. Funding Date', 'Funding Month',
+    'Conditions Cleared', 'Land Inspected', 'Delivery Inspection', 'Closed', 'Delivered',
+    'Funded', 'Completed', 'Closed (Final)', 'Completion %'
+  ];
+  const rows = allCustomers.map((c) => {
+    const cl = c.checklistSummary || {};
+    return [
+      `${c.firstName} ${c.lastName}`, c.phone || '', c.status || '', c.lender || '',
+      c.loanType || '', c.modelName || '', c.modelFactory || '', c.homeName || '',
+      c.ordered ? 'Y' : 'N', c.specced ? 'Y' : 'N', c.estGrossProfit || 0,
+      c.projectedFundingDate || '', c.fundingMonth || '',
+      cl.conditionsCleared ? 'Y' : 'N', cl.landInspected ? 'Y' : 'N', cl.deliveryInspection ? 'Y' : 'N',
+      cl.closed ? 'Y' : 'N', cl.delivered ? 'Y' : 'N', cl.funded ? 'Y' : 'N',
+      cl.completed ? 'Y' : 'N', cl.closedFinal ? 'Y' : 'N', `${c.completionPct}%`
+    ].map((v) => `"${String(v).replace(/"/g, '""')}"`).join(',');
+  });
+  const csv = [headers.join(','), ...rows].join('\n');
+  const now = new Date();
+  const localDate = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
+  const blob = new Blob([csv], { type: 'text/csv' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `pipeline-report-${localDate}.csv`;
+  a.click();
+  URL.revokeObjectURL(url);
+}
+
+function renderPipelineMonthContent() {
+  const monthData = state.pipelineMonthsData.find((m) => m.month === state.pipelineActiveMonth);
   if (!monthData) return;
 
-  const ALL_STATUSES = [
-    'Contact Status', 'App Submitted', 'Approved', 'Pending Conditions', 'Ready to Close',
-    'Appraisal', 'Docs Ordered', 'Closed Pending Delivery', 'Delivered Pending Funding',
-    'Funded', 'Trimout Pending', 'Trimmed Out Pending Addl Work', 'Completed', 'Closed'
-  ];
+  const filterStatus = state.pipelineFilterStatus;
+  const filterLender = state.pipelineFilterLender;
+
+  let customers = monthData.customers;
+  if (filterStatus) customers = customers.filter((c) => c.status === filterStatus);
+  if (filterLender) customers = customers.filter((c) => c.lender === filterLender);
 
   els.pipelineReportContent.innerHTML = '';
 
   const heading = document.createElement('h4');
   heading.style.margin = '16px 0 8px';
-  heading.textContent = `${monthData.month} — ${monthData.total} Active Customer(s)`;
+  heading.textContent = `${monthData.month} — ${customers.length} of ${monthData.total} Active Customer(s)`;
   els.pipelineReportContent.appendChild(heading);
 
+  if (customers.length === 0) {
+    const p = document.createElement('p');
+    p.className = 'muted';
+    p.style.padding = '12px';
+    p.textContent = 'No customers match the current filters for this month.';
+    els.pipelineReportContent.appendChild(p);
+    return;
+  }
+
+  const ck = (val) => val ? '<span style="color:#22c55e;font-weight:bold">✓</span>' : '<span style="color:#ef4444">✗</span>';
+
+  const wrap = document.createElement('div');
+  wrap.style.overflowX = 'auto';
+
   const table = document.createElement('table');
-  table.className = 'pipeline-report-table';
+  table.className = 'pipeline-report-table advanced-pipeline-table';
   table.innerHTML = `
     <thead>
       <tr>
+        <th>Customer</th>
         <th>Status</th>
-        <th>Count</th>
-        <th>% of Total</th>
+        <th>Lender</th>
+        <th>Loan Type</th>
+        <th>Model Name</th>
+        <th>Model Factory</th>
+        <th>Home Name</th>
+        <th>Ordered</th>
+        <th>Spec'd</th>
+        <th>Est. Gross Profit</th>
+        <th>Proj. Funding Date</th>
+        <th>Cond. Cleared</th>
+        <th>Land Insp.</th>
+        <th>Delivery Insp.</th>
+        <th>Closed</th>
+        <th>Delivered</th>
+        <th>Funded</th>
+        <th>Completed</th>
+        <th>Closed (Final)</th>
+        <th>Done %</th>
       </tr>
     </thead>
     <tbody>
-      ${ALL_STATUSES.map((status) => {
-        const count = monthData.statusCounts[status] || 0;
-        const pct = monthData.total > 0 ? Math.round((count / monthData.total) * 100) : 0;
-        return `<tr ${count > 0 ? 'class="pipeline-row-active"' : ''}>
-          <td>${escHtml(status)}</td>
-          <td><strong>${count}</strong></td>
+      ${customers.map((c) => {
+        const cl = c.checklistSummary || {};
+        const rowClass = getPipelineRowColor(c.status);
+        const profit = c.estGrossProfit ? `$${Number(c.estGrossProfit).toLocaleString()}` : '<span class="muted">-</span>';
+        return `<tr class="${rowClass}">
+          <td><strong>${escHtml(c.firstName)} ${escHtml(c.lastName)}</strong><br><span class="muted" style="font-size:0.75rem">${escHtml(c.phone || '-')}</span></td>
+          <td><span class="badge badge-blue" style="font-size:0.7rem;white-space:nowrap">${escHtml(c.status || '-')}</span></td>
+          <td>${c.lender ? `<span class="badge badge-green" style="font-size:0.7rem">${escHtml(c.lender)}</span>` : '<span class="muted">-</span>'}</td>
+          <td>${escHtml(c.loanType || '-')}</td>
+          <td>${escHtml(c.modelName || '-')}</td>
+          <td>${escHtml(c.modelFactory || '-')}</td>
+          <td>${escHtml(c.homeName || '-')}</td>
+          <td style="text-align:center">${c.ordered ? '<span style="color:#22c55e;font-weight:bold">Y</span>' : '<span class="muted">N</span>'}</td>
+          <td style="text-align:center">${c.specced ? '<span style="color:#22c55e;font-weight:bold">Y</span>' : '<span class="muted">N</span>'}</td>
+          <td>${profit}</td>
+          <td style="white-space:nowrap">${escHtml(c.projectedFundingDate || '-')}</td>
+          <td style="text-align:center">${ck(cl.conditionsCleared)}</td>
+          <td style="text-align:center">${ck(cl.landInspected)}</td>
+          <td style="text-align:center">${ck(cl.deliveryInspection)}</td>
+          <td style="text-align:center">${ck(cl.closed)}</td>
+          <td style="text-align:center">${ck(cl.delivered)}</td>
+          <td style="text-align:center">${ck(cl.funded)}</td>
+          <td style="text-align:center">${ck(cl.completed)}</td>
+          <td style="text-align:center">${ck(cl.closedFinal)}</td>
           <td>
-            <div class="pipeline-bar-wrap">
-              <div class="pipeline-bar-fill" style="width:${pct}%"></div>
-              <span>${pct}%</span>
+            <div class="pipeline-bar-wrap" style="min-width:60px">
+              <div class="pipeline-bar-fill" style="width:${c.completionPct}%"></div>
+              <span>${c.completionPct}%</span>
             </div>
           </td>
         </tr>`;
       }).join('')}
     </tbody>
   `;
-  els.pipelineReportContent.appendChild(table);
+  wrap.appendChild(table);
+  els.pipelineReportContent.appendChild(wrap);
 }
 
 els.loginForm.addEventListener('submit', async (event) => {
@@ -2232,6 +2401,16 @@ els.pipelineBtn.addEventListener('click', async () => {
   }
 });
 els.pipelineCloseBtn.addEventListener('click', () => els.pipelinePanel.classList.add('hidden'));
+
+els.pipelineFilterStatus.addEventListener('change', (e) => {
+  state.pipelineFilterStatus = e.target.value;
+  renderPipelineMonthContent();
+});
+els.pipelineFilterLender.addEventListener('change', (e) => {
+  state.pipelineFilterLender = e.target.value;
+  renderPipelineMonthContent();
+});
+els.pipelineExportCsvBtn.addEventListener('click', exportPipelineCsv);
 
 els.listToggle.addEventListener('click', () => { state.view = 'list'; render(); });
 els.boardToggle.addEventListener('click', () => { state.view = 'board'; render(); });

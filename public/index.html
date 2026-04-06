@@ -143,8 +143,38 @@
         <!-- Pipeline Report Panel -->
         <section id="pipeline-panel" class="panel hidden" style="margin-bottom:16px">
           <div class="toolbar">
-            <h3 style="margin:0">📊 Monthly Pipeline Report</h3>
-            <button id="pipeline-close-btn">✕ Close</button>
+            <h3 style="margin:0">📊 Advanced Pipeline Report</h3>
+            <div class="toolbar-actions">
+              <select id="pipeline-filter-status" style="font-size:0.85rem">
+                <option value="">All Statuses</option>
+                <option>App Submitted</option>
+                <option>Approved</option>
+                <option>Pending Conditions</option>
+                <option>Ready to Close</option>
+                <option>Appraisal</option>
+                <option>Docs Ordered</option>
+                <option>Closed Pending Delivery</option>
+                <option>Delivered Pending Funding</option>
+                <option>Funded</option>
+                <option>Trimout Pending</option>
+                <option>Trimmed Out Pending Addl Work</option>
+                <option>Completed</option>
+                <option>Closed</option>
+              </select>
+              <select id="pipeline-filter-lender" style="font-size:0.85rem">
+                <option value="">All Lenders</option>
+                <option>21ST</option>
+                <option>CPM</option>
+                <option>Triad</option>
+                <option>CUHU</option>
+                <option>Cash</option>
+                <option>Other</option>
+                <option>CSL</option>
+                <option>Calcon</option>
+              </select>
+              <button id="pipeline-export-csv-btn" style="font-size:0.85rem">⬇️ Export CSV</button>
+              <button id="pipeline-close-btn">✕ Close</button>
+            </div>
           </div>
           <div id="pipeline-month-tabs" class="month-tabs"></div>
           <div id="pipeline-report-content"></div>

@@ -825,6 +825,26 @@ code {
   font-weight: 600;
 }
 
+/* Advanced pipeline row color coding */
+.advanced-pipeline-table .pipeline-row-red {
+  background: rgba(239, 68, 68, 0.08);
+}
+.advanced-pipeline-table .pipeline-row-red:hover {
+  background: rgba(239, 68, 68, 0.14);
+}
+.advanced-pipeline-table .pipeline-row-yellow {
+  background: rgba(234, 179, 8, 0.08);
+}
+.advanced-pipeline-table .pipeline-row-yellow:hover {
+  background: rgba(234, 179, 8, 0.14);
+}
+.advanced-pipeline-table .pipeline-row-green {
+  background: rgba(34, 197, 94, 0.08);
+}
+.advanced-pipeline-table .pipeline-row-green:hover {
+  background: rgba(34, 197, 94, 0.14);
+}
+
 .pipeline-bar-wrap {
   display: flex;
   align-items: center;
