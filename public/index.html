@@ -3,7 +3,7 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>My CRM</title>
+    <title>Exclusive Mobile Home Transport CRM</title>
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link
@@ -18,7 +18,10 @@
     <main class="app-shell">
       <!-- Login / Register Panel -->
       <section id="login-panel" class="panel login-panel">
-        <h1>Lead Command Center</h1>
+        <h1 style="display:flex;align-items:center;gap:12px">
+          <span style="display:inline-flex;align-items:center;justify-content:center;width:44px;height:44px;background:#dc143c;border-radius:12px;font-size:1.4rem;font-weight:800;color:#fff;flex-shrink:0">E</span>
+          Exclusive Mobile Home Transport
+        </h1>
         <p class="muted">Sign in to manage your pipeline.</p>
 
         <div id="login-form-wrap">
@@ -46,7 +49,10 @@
       <section id="app-panel" class="panel hidden">
         <header class="toolbar">
           <div>
-            <h2>My CRM</h2>
+            <h2 style="display:flex;align-items:center;gap:10px;margin:0">
+              <span style="display:inline-flex;align-items:center;justify-content:center;width:32px;height:32px;background:#dc143c;border-radius:8px;font-size:1.1rem;font-weight:800;color:#fff;flex-shrink:0">E</span>
+              <span>Exclusive Mobile Home Transport</span>
+            </h2>
             <p class="muted" id="user-line"></p>
           </div>
           <div class="toolbar-actions">
@@ -238,7 +244,7 @@
               <label class="check-label"><input type="radio" name="moveTimeline" value="not_ready" /> Not Ready</label>
             </div>
           </div>
-          <div id="longterm-notice" class="recall-notice hidden" style="border-color:#f0a500;background:#fffbe6;color:#7a5800">
+          <div id="longterm-notice" class="recall-notice hidden">
             📅 "Not Ready" leads are placed in the Long-Term Bucket with a monthly call task and drip email enrollment.
           </div>
         </fieldset>
