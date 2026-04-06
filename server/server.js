@@ -1653,11 +1653,13 @@ app.get('/api/pipeline/advanced-report', authMiddleware, (req, res) => {
     monthOrder[c.fundingMonth].push(c);
   });
 
-  // Sort months chronologically
+  // Sort months chronologically using the earliest projected funding date in each group
   const sortedMonths = Object.keys(monthOrder).sort((a, b) => {
     if (a === 'Unknown') return 1;
     if (b === 'Unknown') return -1;
-    return new Date(a + ' 1') - new Date(b + ' 1');
+    const dateA = monthOrder[a].map((c) => c.projectedFundingDate).filter(Boolean).sort()[0] || '';
+    const dateB = monthOrder[b].map((c) => c.projectedFundingDate).filter(Boolean).sort()[0] || '';
+    return dateA.localeCompare(dateB);
   });
 
   res.json({
