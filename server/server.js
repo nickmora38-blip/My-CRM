@@ -315,6 +315,10 @@ app.delete('/api/leads/:id', (req, res) => {
   res.json({ success: true });
 });
 
+app.get('/health', (req, res) => {
+  res.status(200).json({ status: 'ok' });
+});
+
 app.use(express.static(path.join(__dirname, '..', 'public')));
 
 app.get('*', (req, res) => {

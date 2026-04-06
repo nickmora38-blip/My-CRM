@@ -1,60 +1,48 @@
 # Deployment Instructions for My-CRM
 
-This document outlines the steps necessary to deploy the My-CRM application to Heroku.
+This document outlines the steps necessary to deploy the My-CRM application to Render.
 
 ## Prerequisites
-- Ensure you have a Heroku account. If not, sign up at [Heroku](https://www.heroku.com/).
-- Install the Heroku CLI on your machine. Follow the instructions [here](https://devcenter.heroku.com/articles/heroku-cli) for installation.
+- GitHub account with the My-CRM repository
+- Render account (sign up at [Render](https://render.com))
 
 ## Steps to Deploy
 
-1. **Login to Heroku**  
-   Open your terminal and run the command:
+1. **Push your code to GitHub**  
+   Ensure your latest code is pushed to the `main` branch:
    ```bash
-   heroku login
-   ```  
-   Follow the prompts to enter your credentials.
-
-2. **Clone the Repository**  
-   If you haven't already, clone the My-CRM repository to your local machine:
-   ```bash
-   git clone https://github.com/nickmora38-blip/My-CRM.git
-   cd My-CRM
+   git push origin main
    ```
 
-3. **Create a New Heroku App**  
-   Create a new app on Heroku:
-   ```bash
-   heroku create your-app-name
-   ```  
-   Replace `your-app-name` with a unique name for your application.
+2. **Create a Web Service on Render**  
+   - Go to the [Render Dashboard](https://dashboard.render.com)
+   - Click **"New +"** and select **"Web Service"**
+   - Connect your GitHub repository (`nickmora38-blip/My-CRM`)
+   - Select the `main` branch
 
-4. **Set Up Environment Variables**  
-   If your application requires any environment variables, set them using the following command:
-   ```bash
-   heroku config:set VARIABLE_NAME=value
-   ```  
-   Repeat this for all necessary environment variables.
+3. **Configure the Service**  
+   Use the following settings:
+   - **Name**: `my-crm`
+   - **Runtime**: `Node`
+   - **Build Command**: `npm install`
+   - **Start Command**: `npm start`
+   - **Instance Type**: Free (or paid if preferred)
 
-5. **Deploy to Heroku**  
-   Push your code to Heroku:
-   ```bash
-   git push heroku main
-   ```
+4. **Set Environment Variables**  
+   In the **"Environment"** section, add the following variables:
+   - `NODE_ENV`: `production`
+   - `JWT_SECRET`: Generate a secure random value or provide your own
+   - `PORT`: Automatically provided by Render — do not set this manually
 
-6. **Open the Application**  
-   Once the deployment is complete, you can access your application using:
-   ```bash
-   heroku open
-   ```
+5. **Deploy**  
+   Click **"Create Web Service"**. Render will automatically build and deploy your application.
 
-7. **View Logs (Optional)**  
-   If you want to monitor the application logs, run:
-   ```bash
-   heroku logs --tail
-   ```
+6. **Monitor**  
+   - Your app will be live at the URL provided by Render (e.g., `https://my-crm.onrender.com`)
+   - View logs and deployment status in the Render dashboard
+   - The `/health` endpoint (`GET /health`) can be used to verify the service is running
 
 ## Conclusion
-Your My-CRM application should now be up and running on Heroku! 
+Your My-CRM application should now be up and running on Render!
 
-For troubleshooting and further information, refer to the [Heroku Dev Center](https://devcenter.heroku.com/).
+For troubleshooting and further information, refer to the [Render Documentation](https://render.com/docs).
