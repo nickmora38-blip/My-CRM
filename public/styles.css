@@ -39,7 +39,7 @@ th {
 }
 
 .app-shell {
-  max-width: 1220px;
+  max-width: 1340px;
   margin: 0 auto;
   padding: 28px 16px 48px;
 }
@@ -132,10 +132,21 @@ button {
   cursor: pointer;
 }
 
+button:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
 button.primary {
   border-color: transparent;
   color: white;
   background: linear-gradient(140deg, #0c7a53, #11573e);
+}
+
+button.danger-btn {
+  border-color: #e8b9b2;
+  color: #a63427;
+  background: #fff5f4;
 }
 
 .toolbar {
@@ -149,14 +160,21 @@ button.primary {
 .toolbar-actions {
   display: flex;
   gap: 8px;
+  flex-wrap: wrap;
 }
 
 .filters {
-  display: grid;
-  grid-template-columns: 2fr 1fr 1fr auto;
+  display: flex;
+  flex-wrap: wrap;
   gap: 10px;
   align-items: center;
   margin-bottom: 14px;
+}
+
+.filters input,
+.filters select {
+  flex: 1;
+  min-width: 140px;
 }
 
 .segmented {
@@ -164,6 +182,7 @@ button.primary {
   border: 1px solid var(--line);
   border-radius: 12px;
   overflow: hidden;
+  flex-shrink: 0;
 }
 
 .segmented button {
@@ -183,7 +202,7 @@ button.primary {
 table {
   width: 100%;
   border-collapse: collapse;
-  min-width: 920px;
+  min-width: 1100px;
 }
 
 th,
@@ -300,11 +319,224 @@ menu {
   display: flex;
   justify-content: flex-end;
   gap: 8px;
+  margin: 16px 0 0;
+  padding: 0;
+}
+
+/* ─── New component styles ──────────────────────────────────────────────── */
+
+/* Badges */
+.badge {
+  display: inline-block;
+  font-size: 0.75rem;
+  padding: 3px 8px;
+  border-radius: 999px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+.badge-green  { background: #d2f4e4; color: #0e5c38; }
+.badge-red    { background: #fde8e5; color: #a63427; }
+.badge-orange { background: #fef3e5; color: #8a4a00; }
+.badge-yellow { background: #fef9db; color: #7a5800; }
+.badge-blue   { background: #e5f0ff; color: #1a4ea6; }
+.badge-purple { background: #f0e5ff; color: #6a1ab0; }
+
+/* Owner chip */
+.owner-chip {
+  font-size: 0.8rem;
+  padding: 2px 8px;
+  background: #f0f4f0;
+  border-radius: 999px;
+  color: var(--muted);
+}
+.owner-chip.owner-me {
+  background: var(--accent-soft);
+  color: #0e4e37;
+}
+
+/* fieldset styling in modal */
+fieldset {
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  padding: 16px;
+  margin-bottom: 14px;
+}
+
+legend {
+  font-weight: 700;
+  font-size: 0.95rem;
+  padding: 0 6px;
+  color: var(--ink);
+}
+
+/* Response buttons */
+.response-btns {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.response-btn {
+  border-radius: 999px;
+  padding: 8px 16px;
+  font-size: 0.9rem;
+  transition: all 0.15s;
+}
+
+.response-btn.active {
+  background: var(--accent-soft);
+  border-color: #5dbe97;
+  color: #0e4e37;
+  font-weight: 600;
+}
+
+.response-btn[data-response="not_answered"].active,
+.response-btn[data-response="left_vm"].active,
+.response-btn[data-response="text"].active {
+  background: #fef3e5;
+  border-color: #f0a500;
+  color: #7a4e00;
+}
+
+/* Recall notice */
+.recall-notice {
+  margin-top: 10px;
+  padding: 10px 14px;
+  background: #fff8e8;
+  border: 1px solid #f0c860;
+  border-radius: 10px;
+  font-size: 0.88rem;
+  color: #6b4c00;
+}
+
+/* Qualification grid */
+.qual-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 16px;
+}
+
+.qual-label {
+  font-weight: 600;
+  font-size: 0.88rem;
+  margin: 0 0 8px;
+  color: var(--ink);
+}
+
+.check-label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 0.9rem;
+  color: var(--ink);
+  margin-bottom: 6px;
+  cursor: pointer;
+}
+
+.check-label input {
+  width: 16px;
+  height: 16px;
+  padding: 0;
+  border-radius: 4px;
+  cursor: pointer;
+}
+
+/* Template picker */
+.template-pick-btn {
+  display: block;
+  width: 100%;
+  text-align: left;
+  padding: 10px 14px;
+  margin-bottom: 8px;
+  border-radius: 10px;
+  transition: all 0.15s;
+}
+
+.template-pick-btn.selected {
+  background: var(--accent-soft);
+  border-color: #5dbe97;
+}
+
+.template-pick-btn:hover {
+  background: #f0f9f4;
+}
+
+/* Dialog / modal styling */
+dialog {
+  border: 1px solid var(--line);
+  border-radius: 18px;
+  padding: 28px;
+  max-width: 700px;
+  width: calc(100vw - 48px);
+  max-height: calc(100vh - 60px);
+  overflow-y: auto;
+  box-shadow: 0 20px 60px rgba(22, 32, 25, 0.18);
+}
+
+dialog::backdrop {
+  background: rgba(10, 20, 12, 0.35);
+  backdrop-filter: blur(2px);
+}
+
+/* Duplicate modal */
+.dup-info {
+  margin: 12px 0;
+}
+
+.dup-entry {
+  padding: 10px;
+  background: #fef9f9;
+  border: 1px solid #f5c6c2;
+  border-radius: 10px;
+  margin-bottom: 8px;
+  font-size: 0.9rem;
+}
+
+/* Task rows */
+.task-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 12px;
+  border-bottom: 1px solid var(--line);
+  gap: 12px;
+}
+
+.task-row:last-child {
+  border-bottom: none;
+}
+
+.task-info {
+  flex: 1;
+}
+
+/* Email record */
+.email-record {
+  padding: 8px 0;
+  border-bottom: 1px solid var(--line);
+  font-size: 0.9rem;
+}
+
+.email-record:last-child {
+  border-bottom: none;
+}
+
+/* Lead modal form width */
+#lead-modal {
+  max-width: 760px;
+}
+
+/* Code styling in template hints */
+code {
+  background: #f0f4f0;
+  padding: 2px 6px;
+  border-radius: 5px;
+  font-size: 0.85em;
 }
 
 @media (max-width: 980px) {
   .filters {
-    grid-template-columns: 1fr;
+    flex-direction: column;
   }
 
   .two-col,
@@ -324,5 +556,13 @@ menu {
   .toolbar-actions {
     width: 100%;
     flex-wrap: wrap;
+  }
+
+  .qual-grid {
+    grid-template-columns: 1fr;
+  }
+
+  dialog {
+    padding: 20px 16px;
   }
 }
