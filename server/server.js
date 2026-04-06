@@ -99,6 +99,8 @@ function readUsers() {
         email: 'demo@crm.local',
         name: 'Demo User',
         isAdmin: true,
+        role: 'admin',
+        active: true,
         passwordHash: bcrypt.hashSync('demo123', 10)
       },
       'alex@crm.local': {
@@ -106,17 +108,27 @@ function readUsers() {
         email: 'alex@crm.local',
         name: 'Alex Morgan',
         isAdmin: false,
+        role: 'phc',
+        active: true,
         passwordHash: bcrypt.hashSync('alex123', 10)
       }
     };
     writeJson(USERS_FILE, seeded);
     return seeded;
   }
-  // Ensure legacy users get isAdmin flag
+  // Ensure legacy users get isAdmin and role fields
   let changed = false;
   Object.values(users).forEach((u) => {
     if (u.isAdmin === undefined) {
       u.isAdmin = u.id === 'user-1';
+      changed = true;
+    }
+    if (u.role === undefined) {
+      u.role = u.isAdmin ? 'admin' : 'phc';
+      changed = true;
+    }
+    if (u.active === undefined) {
+      u.active = true;
       changed = true;
     }
   });
@@ -190,11 +202,15 @@ function authMiddleware(req, res, next) {
 function adminMiddleware(req, res, next) {
   const users = readUsers();
   const userRecord = Object.values(users).find((u) => u.id === req.user.sub);
-  if (!userRecord || !userRecord.isAdmin) {
+  if (!isAdminUser(userRecord)) {
     return res.status(403).json({ error: 'Admin access required' });
   }
   req.isAdmin = true;
   next();
+}
+
+function isAdminUser(userRecord) {
+  return userRecord && (userRecord.isAdmin || userRecord.role === 'admin');
 }
 
 // ─── Lead helpers ─────────────────────────────────────────────────────────────
@@ -434,60 +450,71 @@ app.post('/api/auth/login', (req, res) => {
     return res.status(401).json({ error: 'Invalid email or password' });
   }
 
-  const token = jwt.sign({ sub: user.id, email: user.email, name: user.name, isAdmin: user.isAdmin }, JWT_SECRET, {
+  const role = user.role || (user.isAdmin ? 'admin' : 'phc');
+  const token = jwt.sign({ sub: user.id, email: user.email, name: user.name, isAdmin: user.isAdmin, role }, JWT_SECRET, {
     expiresIn: '12h'
   });
-  return res.json({ token, user: { id: user.id, email: user.email, name: user.name, isAdmin: user.isAdmin } });
+  return res.json({ token, user: { id: user.id, email: user.email, name: user.name, isAdmin: user.isAdmin, role } });
 });
 
 app.post('/api/auth/register', (req, res) => {
   const { email, password, name } = req.body;
   if (!email || !password) return res.status(400).json({ error: 'Email and password are required' });
   if (password.length < 6) return res.status(400).json({ error: 'Password must be at least 6 characters' });
-  const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+  const emailRegex = /^[a-zA-Z0-9._%+\-]+@[a-zA-Z0-9.\-]+\.[a-zA-Z]{2,}$/;
   if (!emailRegex.test(email)) return res.status(400).json({ error: 'Invalid email format' });
 
   const users = readUsers();
   if (users[email]) return res.status(409).json({ error: 'Email already registered' });
 
-  const userId = `user_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+  const userId = `user_${crypto.randomUUID()}`;
   const passwordHash = bcrypt.hashSync(password, 10);
   // First registered user beyond demo becomes admin if no other admin exists
-  const hasAdmin = Object.values(users).some((u) => u.isAdmin);
+  const hasAdmin = Object.values(users).some(isAdminUser);
+  const isAdmin = !hasAdmin;
+  const role = isAdmin ? 'admin' : 'phc';
   users[email] = {
     id: userId,
     email,
     name: (name || email.split('@')[0]).trim(),
-    isAdmin: !hasAdmin,
+    isAdmin,
+    role,
+    active: true,
     passwordHash
   };
   writeUsers(users);
 
-  const token = jwt.sign({ sub: userId, email, name: users[email].name, isAdmin: users[email].isAdmin }, JWT_SECRET, {
+  const token = jwt.sign({ sub: userId, email, name: users[email].name, isAdmin, role }, JWT_SECRET, {
     expiresIn: '12h'
   });
-  return res.status(201).json({ token, user: { id: userId, email, name: users[email].name, isAdmin: users[email].isAdmin } });
+  return res.status(201).json({ token, user: { id: userId, email, name: users[email].name, isAdmin, role } });
 });
 
 app.get('/api/auth/me', authMiddleware, (req, res) => {
   const users = readUsers();
   const userRecord = Object.values(users).find((u) => u.id === req.user.sub);
-  res.json({ user: { ...req.user, isAdmin: userRecord ? userRecord.isAdmin : false } });
+  const isAdmin = isAdminUser(userRecord);
+  const role = userRecord ? (userRecord.role || (isAdmin ? 'admin' : 'phc')) : 'phc';
+  res.json({ user: { ...req.user, isAdmin, role } });
 });
 
 // ─── Leads routes ─────────────────────────────────────────────────────────────
 
 app.use('/api/leads', authMiddleware);
 
-// GET /api/leads — all users can see all leads
+// GET /api/leads — admins see all; PHC users see only their own
 app.get('/api/leads', (req, res) => {
   const leads = readLeads();
+  const users = readUsers();
+  const userRecord = Object.values(users).find((u) => u.id === req.user.sub);
+  const isAdmin = isAdminUser(userRecord);
   const { status, source, search, owner } = req.query;
 
-  let filtered = leads;
+  // PHC users can only see their own leads
+  let filtered = isAdmin ? leads : leads.filter((l) => l.leadOwner === req.user.sub);
   if (status) filtered = filtered.filter((l) => l.status === status);
   if (source) filtered = filtered.filter((l) => l.source === source);
-  if (owner) filtered = filtered.filter((l) => l.leadOwner === owner);
+  if (owner && isAdmin) filtered = filtered.filter((l) => l.leadOwner === owner);
   if (search) {
     const q = search.toLowerCase();
     filtered = filtered.filter((l) =>
@@ -561,6 +588,8 @@ app.post('/api/leads', (req, res) => {
     ...leadInput,
     leadOwner: req.user.sub,
     leadOwnerName: userRecord ? userRecord.name : req.user.name,
+    createdBy: req.user.sub,
+    createdByName: userRecord ? userRecord.name : req.user.name,
     recallCampaignActive: false,
     recallCampaignStarted: null,
     lastContactAttempt: null,
@@ -611,7 +640,7 @@ app.put('/api/leads/:id', (req, res) => {
   const lead = leads[idx];
   const users = readUsers();
   const userRecord = Object.values(users).find((u) => u.id === req.user.sub);
-  const isAdmin = userRecord && userRecord.isAdmin;
+  const isAdmin = isAdminUser(userRecord);
 
   if (lead.leadOwner !== req.user.sub && !isAdmin) {
     return res.status(403).json({ error: 'Only the lead owner can modify this lead' });
@@ -632,6 +661,8 @@ app.put('/api/leads/:id', (req, res) => {
     // immutable fields
     leadOwner: lead.leadOwner,
     leadOwnerName: lead.leadOwnerName,
+    createdBy: lead.createdBy || lead.leadOwner,
+    createdByName: lead.createdByName || lead.leadOwnerName,
     createdAt: lead.createdAt,
     duplicateMergeHistory: lead.duplicateMergeHistory || [],
     emailsSent: lead.emailsSent || [],
@@ -681,20 +712,20 @@ app.put('/api/leads/:id', (req, res) => {
   res.json({ lead: leads[idx] });
 });
 
-// DELETE /api/leads/:id — only lead owner (or admin) can delete
+// DELETE /api/leads/:id — only admins can delete leads
 app.delete('/api/leads/:id', (req, res) => {
+  const users = readUsers();
+  const userRecord = Object.values(users).find((u) => u.id === req.user.sub);
+  const isAdmin = isAdminUser(userRecord);
+
+  // Only admins can delete leads; PHC users cannot delete
+  if (!isAdmin) {
+    return res.status(403).json({ error: 'Only admins can delete leads' });
+  }
+
   const leads = readLeads();
   const idx = leads.findIndex((l) => l.id === req.params.id);
   if (idx === -1) return res.status(404).json({ error: 'Lead not found' });
-
-  const lead = leads[idx];
-  const users = readUsers();
-  const userRecord = Object.values(users).find((u) => u.id === req.user.sub);
-  const isAdmin = userRecord && userRecord.isAdmin;
-
-  if (lead.leadOwner !== req.user.sub && !isAdmin) {
-    return res.status(403).json({ error: 'Only the lead owner can delete this lead' });
-  }
 
   leads.splice(idx, 1);
   writeLeads(leads);
@@ -832,18 +863,143 @@ app.use('/api/admin', authMiddleware, adminMiddleware);
 // GET /api/admin/users — list all users (for ownership transfer)
 app.get('/api/admin/users', (req, res) => {
   const users = readUsers();
-  const list = Object.values(users).map((u) => ({ id: u.id, name: u.name, email: u.email, isAdmin: u.isAdmin }));
+  const list = Object.values(users).map((u) => ({
+    id: u.id,
+    name: u.name,
+    email: u.email,
+    isAdmin: u.isAdmin,
+    role: u.role || (u.isAdmin ? 'admin' : 'phc'),
+    active: u.active !== false
+  }));
   res.json({ users: list });
 });
 
-// POST /api/admin/approve-duplicate — admin approves/rejects duplicate lead entry
+// POST /api/admin/users — create a new user (admin only)
+app.post('/api/admin/users', (req, res) => {
+  const { email, password, name, role } = req.body;
+  if (!email || !password) return res.status(400).json({ error: 'Email and password are required' });
+  if (password.length < 6) return res.status(400).json({ error: 'Password must be at least 6 characters' });
+  const emailRegex = /^[a-zA-Z0-9._%+\-]+@[a-zA-Z0-9.\-]+\.[a-zA-Z]{2,}$/;
+  if (!emailRegex.test(email)) return res.status(400).json({ error: 'Invalid email format' });
+  const validRoles = ['admin', 'phc'];
+  const assignedRole = validRoles.includes(role) ? role : 'phc';
+
+  const users = readUsers();
+  if (users[email]) return res.status(409).json({ error: 'Email already registered' });
+
+  const userId = `user_${crypto.randomUUID()}`;
+  const passwordHash = bcrypt.hashSync(password, 10);
+  const isAdmin = assignedRole === 'admin';
+  users[email] = {
+    id: userId,
+    email: email.toLowerCase(),
+    name: (name || email.split('@')[0]).trim(),
+    isAdmin,
+    role: assignedRole,
+    active: true,
+    passwordHash
+  };
+  writeUsers(users);
+
+  res.status(201).json({ user: { id: userId, email: email.toLowerCase(), name: users[email].name, isAdmin, role: assignedRole, active: true } });
+});
+
+// DELETE /api/admin/users/:id — delete a user (admin only)
+app.delete('/api/admin/users/:id', (req, res) => {
+  if (req.params.id === req.user.sub) {
+    return res.status(400).json({ error: 'You cannot delete your own account' });
+  }
+  const users = readUsers();
+  const email = Object.keys(users).find((k) => users[k].id === req.params.id);
+  if (!email) return res.status(404).json({ error: 'User not found' });
+  delete users[email];
+  writeUsers(users);
+  res.json({ success: true });
+});
+
+// PUT /api/admin/users/:id — update user role or name (admin only)
+app.put('/api/admin/users/:id', (req, res) => {
+  const users = readUsers();
+  const email = Object.keys(users).find((k) => users[k].id === req.params.id);
+  if (!email) return res.status(404).json({ error: 'User not found' });
+
+  const { role, name, active } = req.body;
+  const validRoles = ['admin', 'phc'];
+  if (role && validRoles.includes(role)) {
+    users[email].role = role;
+    users[email].isAdmin = role === 'admin';
+  }
+  if (name) users[email].name = name.trim();
+  if (active !== undefined) users[email].active = Boolean(active);
+  writeUsers(users);
+
+  res.json({ user: { id: users[email].id, email, name: users[email].name, isAdmin: users[email].isAdmin, role: users[email].role, active: users[email].active } });
+});
+
+// POST /api/admin/approve-duplicate — admin handles duplicate lead entry
 app.post('/api/admin/approve-duplicate', (req, res) => {
-  const { approved, pendingLeadData, targetUserId, note } = req.body;
-  if (approved === undefined) return res.status(400).json({ error: 'approved field is required' });
+  const { approved, action, pendingLeadData, targetUserId, existingLeadId, note } = req.body;
 
-  if (!approved) return res.json({ success: true, message: 'Duplicate entry rejected by admin' });
+  // Determine action — support both legacy `approved` boolean and new `action` string
+  const resolvedAction = action || (approved === true ? 'allow' : 'decline');
 
-  // Create the lead with admin approval marker
+  if (resolvedAction === 'decline') {
+    return res.json({ success: true, message: 'Duplicate entry declined by admin' });
+  }
+
+  if (resolvedAction === 'change_owner') {
+    // Change the owner of the existing lead to a different user
+    if (!existingLeadId) return res.status(400).json({ error: 'existingLeadId is required for change_owner action' });
+    if (!targetUserId) return res.status(400).json({ error: 'targetUserId is required for change_owner action' });
+
+    const leads = readLeads();
+    const idx = leads.findIndex((l) => l.id === existingLeadId);
+    if (idx === -1) return res.status(404).json({ error: 'Existing lead not found' });
+
+    const users = readUsers();
+    const newOwner = Object.values(users).find((u) => u.id === targetUserId);
+    if (!newOwner) return res.status(404).json({ error: 'Target user not found' });
+
+    leads[idx].leadOwner = newOwner.id;
+    leads[idx].leadOwnerName = newOwner.name;
+    leads[idx].duplicateMergeHistory = [
+      ...(leads[idx].duplicateMergeHistory || []),
+      { mergedAt: new Date().toISOString(), action: 'change_owner', actionedBy: req.user.sub, newOwner: newOwner.id, note: note || 'Admin changed lead owner via duplicate review' }
+    ];
+    leads[idx].updatedAt = new Date().toISOString();
+    writeLeads(leads);
+
+    return res.json({ lead: leads[idx], message: 'Lead ownership changed by admin' });
+  }
+
+  if (resolvedAction === 'merge') {
+    // Merge new lead data into existing lead
+    if (!existingLeadId) return res.status(400).json({ error: 'existingLeadId is required for merge action' });
+    const mergeInput = sanitizeLeadInput(pendingLeadData || {});
+
+    const leads = readLeads();
+    const idx = leads.findIndex((l) => l.id === existingLeadId);
+    if (idx === -1) return res.status(404).json({ error: 'Existing lead not found' });
+
+    // Merge: fill in empty fields from new data
+    const existing = leads[idx];
+    const merged = { ...existing };
+    Object.keys(mergeInput).forEach((key) => {
+      if (!merged[key] && mergeInput[key]) merged[key] = mergeInput[key];
+    });
+    const now = new Date().toISOString();
+    merged.updatedAt = now;
+    merged.duplicateMergeHistory = [
+      ...(existing.duplicateMergeHistory || []),
+      { mergedAt: now, action: 'merge', actionedBy: req.user.sub, note: note || 'Admin merged duplicate entry' }
+    ];
+    leads[idx] = merged;
+    writeLeads(leads);
+
+    return res.json({ lead: leads[idx], message: 'Duplicate merged into existing lead' });
+  }
+
+  // action === 'allow' — create new lead
   const leadInput = sanitizeLeadInput(pendingLeadData || {});
   if (!ensureLeadRequired(leadInput)) {
     return res.status(400).json({ error: 'firstName and lastName are required in pendingLeadData' });
@@ -853,6 +1009,7 @@ app.post('/api/admin/approve-duplicate', (req, res) => {
   const ownerRecord = targetUserId
     ? Object.values(users).find((u) => u.id === targetUserId)
     : Object.values(users).find((u) => u.id === req.user.sub);
+  const creatorRecord = Object.values(users).find((u) => u.id === req.user.sub);
 
   const now = new Date().toISOString();
   const lead = {
@@ -860,13 +1017,15 @@ app.post('/api/admin/approve-duplicate', (req, res) => {
     ...leadInput,
     leadOwner: ownerRecord ? ownerRecord.id : req.user.sub,
     leadOwnerName: ownerRecord ? ownerRecord.name : req.user.name,
+    createdBy: req.user.sub,
+    createdByName: creatorRecord ? creatorRecord.name : req.user.name,
     recallCampaignActive: false,
     recallCampaignStarted: null,
     lastContactAttempt: null,
     contactAttempts: 0,
     emailsSent: [],
     isDead: false,
-    duplicateMergeHistory: [{ mergedAt: now, approvedBy: req.user.sub, note: note || 'Admin approved duplicate entry' }],
+    duplicateMergeHistory: [{ mergedAt: now, action: 'allow', actionedBy: req.user.sub, note: note || 'Admin approved duplicate entry' }],
     createdAt: now,
     updatedAt: now
   };
@@ -911,7 +1070,7 @@ app.put('/api/admin/leads/:id/transfer', (req, res) => {
   leads[idx].leadOwnerName = newOwner.name;
   leads[idx].duplicateMergeHistory = [
     ...(leads[idx].duplicateMergeHistory || []),
-    { mergedAt: new Date().toISOString(), transferredBy: req.user.sub, newOwner: newOwner.id, note: 'Lead transferred by admin' }
+    { mergedAt: new Date().toISOString(), action: 'transfer', actionedBy: req.user.sub, newOwner: newOwner.id, note: 'Lead transferred by admin' }
   ];
   leads[idx].updatedAt = new Date().toISOString();
   writeLeads(leads);

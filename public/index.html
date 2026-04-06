@@ -53,6 +53,7 @@
             <button id="new-lead-btn" class="primary">+ New Lead</button>
             <button id="tasks-btn">📋 Tasks</button>
             <button id="templates-btn">✉️ Templates</button>
+            <button id="users-btn" class="hidden">👥 Users</button>
             <button id="export-btn">⬇️ CSV</button>
             <button id="logout-btn">Logout</button>
           </div>
@@ -77,6 +78,18 @@
             </div>
           </div>
           <div id="templates-list"></div>
+        </section>
+
+        <!-- User Management Panel (Admin Only) -->
+        <section id="users-panel" class="panel hidden" style="margin-bottom:16px">
+          <div class="toolbar">
+            <h3 style="margin:0">👥 User Management</h3>
+            <div class="toolbar-actions">
+              <button id="add-user-btn" class="primary">+ Add User</button>
+              <button id="users-close-btn">✕ Close</button>
+            </div>
+          </div>
+          <div id="users-list"></div>
         </section>
 
         <section id="list-view">
@@ -247,18 +260,24 @@
 
     <!-- Duplicate Warning Modal -->
     <dialog id="dup-modal">
-      <div>
+      <div class="dup-modal-inner">
         <h3>⚠️ Duplicate Lead Detected</h3>
-        <p>A lead with the same name, email, or phone already exists:</p>
-        <div id="dup-info" class="dup-info"></div>
-        <p class="hint">Only an admin can approve creating a duplicate entry.</p>
+        <p>The following existing lead(s) match by name, email, or phone:</p>
+        <div id="dup-comparison" class="dup-comparison"></div>
+        <p class="hint" id="dup-phc-hint">Only an admin can approve creating a duplicate entry. Your submission has been held for review.</p>
         <div id="dup-admin-section" class="hidden">
-          <p><strong>Admin Override:</strong></p>
-          <label>Note (optional) <input id="dup-note" type="text" placeholder="Reason for allowing duplicate…" /></label>
+          <label>Note (optional) <input id="dup-note" type="text" placeholder="Reason for action…" /></label>
+          <div id="dup-owner-select-wrap" class="hidden" style="margin-top:8px">
+            <label>Assign lead to:
+              <select id="dup-owner-dropdown" style="margin-left:8px;padding:4px 8px"></select>
+            </label>
+          </div>
         </div>
-        <menu>
-          <button type="button" id="dup-reject-btn">Cancel Entry</button>
-          <button type="button" id="dup-approve-btn" class="primary hidden">✓ Approve &amp; Create</button>
+        <menu class="dup-actions">
+          <button type="button" id="dup-reject-btn">✕ Decline</button>
+          <button type="button" id="dup-allow-btn" class="primary hidden">✓ Allow (Create New)</button>
+          <button type="button" id="dup-merge-btn" class="hidden btn-merge">⚡ Merge into Existing</button>
+          <button type="button" id="dup-owner-btn" class="hidden btn-owner">🔁 Change Owner</button>
         </menu>
       </div>
     </dialog>
@@ -308,6 +327,28 @@
         <menu>
           <button type="button" id="tmpl-cancel-btn">Cancel</button>
           <button type="button" id="tmpl-save-btn" class="primary">Save Template</button>
+        </menu>
+      </div>
+    </dialog>
+
+    <!-- User Add/Edit Modal (Admin Only) -->
+    <dialog id="user-modal">
+      <div style="min-width:400px">
+        <h3 id="user-modal-title">Add User</h3>
+        <div class="grid" style="gap:10px">
+          <label>Full Name * <input id="user-name" type="text" placeholder="Jane Smith" required /></label>
+          <label>Email * <input id="user-email" type="email" placeholder="jane@example.com" required /></label>
+          <label id="user-password-wrap">Password * <input id="user-password" type="password" placeholder="At least 6 characters" /></label>
+          <label>Role
+            <select id="user-role">
+              <option value="phc">PHC (Production Handler)</option>
+              <option value="admin">Admin</option>
+            </select>
+          </label>
+        </div>
+        <menu>
+          <button type="button" id="user-cancel-btn">Cancel</button>
+          <button type="button" id="user-save-btn" class="primary">Save User</button>
         </menu>
       </div>
     </dialog>
