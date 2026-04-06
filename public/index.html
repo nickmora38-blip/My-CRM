@@ -16,46 +16,33 @@
     <div id="background-glow"></div>
 
     <main class="app-shell">
+      <!-- Login / Register Panel -->
       <section id="login-panel" class="panel login-panel">
         <h1>Lead Command Center</h1>
         <p class="muted">Sign in to manage your pipeline.</p>
 
         <div id="login-form-wrap">
           <form id="login-form" class="grid two-col">
-            <label>
-              Email
-              <input name="email" type="email" value="demo@crm.local" required />
-            </label>
-            <label>
-              Password
-              <input name="password" type="password" value="demo123" required />
-            </label>
+            <label>Email <input name="email" type="email" value="demo@crm.local" required /></label>
+            <label>Password <input name="password" type="password" value="demo123" required /></label>
             <button type="submit" class="primary">Sign In</button>
           </form>
           <p class="hint">Don't have an account? <a href="#" id="toggle-register">Create one</a></p>
-          <p class="hint">Demo: demo@crm.local / demo123</p>
+          <p class="hint">Demo: demo@crm.local / demo123 &nbsp;|&nbsp; Admin: demo@crm.local</p>
         </div>
 
         <div id="register-form-wrap" class="hidden">
           <form id="register-form" class="grid two-col">
-            <label class="span-2">
-              Email
-              <input name="email" type="email" placeholder="your@email.com" required />
-            </label>
-            <label class="span-2">
-              Full Name (optional)
-              <input name="name" type="text" placeholder="Your Name" />
-            </label>
-            <label class="span-2">
-              Password
-              <input name="password" type="password" placeholder="At least 6 characters" required />
-            </label>
+            <label class="span-2">Email <input name="email" type="email" placeholder="your@email.com" required /></label>
+            <label class="span-2">Full Name (optional) <input name="name" type="text" placeholder="Your Name" /></label>
+            <label class="span-2">Password <input name="password" type="password" placeholder="At least 6 characters" required /></label>
             <button type="submit" class="primary">Create Account</button>
           </form>
           <p class="hint">Already have an account? <a href="#" id="toggle-login">Sign in</a></p>
         </div>
       </section>
 
+      <!-- Main App Panel -->
       <section id="app-panel" class="panel hidden">
         <header class="toolbar">
           <div>
@@ -63,17 +50,40 @@
             <p class="muted" id="user-line"></p>
           </div>
           <div class="toolbar-actions">
-            <button id="new-lead-btn" class="primary">New Lead</button>
-            <button id="export-btn">Export CSV</button>
+            <button id="new-lead-btn" class="primary">+ New Lead</button>
+            <button id="tasks-btn">📋 Tasks</button>
+            <button id="templates-btn">✉️ Templates</button>
+            <button id="export-btn">⬇️ CSV</button>
             <button id="logout-btn">Logout</button>
           </div>
         </header>
 
+        <!-- Tasks Panel -->
+        <section id="tasks-panel" class="panel hidden" style="margin-bottom:16px">
+          <div class="toolbar">
+            <h3 style="margin:0">Recall &amp; Follow-Up Tasks</h3>
+            <button id="tasks-close-btn">✕ Close</button>
+          </div>
+          <div id="tasks-list"></div>
+        </section>
+
+        <!-- Email Templates Panel -->
+        <section id="templates-panel" class="panel hidden" style="margin-bottom:16px">
+          <div class="toolbar">
+            <h3 style="margin:0">Email Templates</h3>
+            <div class="toolbar-actions">
+              <button id="new-template-btn" class="primary">+ New Template</button>
+              <button id="templates-close-btn">✕ Close</button>
+            </div>
+          </div>
+          <div id="templates-list"></div>
+        </section>
+
         <section id="list-view">
           <div class="filters">
-            <input id="search-input" placeholder="Search name, route, source" />
+            <input id="search-input" placeholder="Search name, route, source…" />
             <select id="status-filter">
-              <option value="">All Statuses</option>
+              <option value="">All Pipeline Stages</option>
               <option>New</option>
               <option>Contacted</option>
               <option>Qualified</option>
@@ -91,6 +101,13 @@
               <option>Walk-in</option>
               <option>Other</option>
             </select>
+            <select id="response-filter">
+              <option value="">All Responses</option>
+              <option value="answered">Answered</option>
+              <option value="not_answered">Not Answered</option>
+              <option value="left_vm">Left VM</option>
+              <option value="text">Text</option>
+            </select>
             <div class="segmented">
               <button id="list-toggle" class="active">List</button>
               <button id="board-toggle">Board</button>
@@ -105,47 +122,194 @@
       </section>
     </main>
 
+    <!-- Lead Entry / Edit Modal -->
     <dialog id="lead-modal">
-      <form id="lead-form" method="dialog">
+      <form id="lead-form">
         <h3 id="lead-modal-title">New Lead</h3>
-        <div class="grid two-col">
-          <label>First Name <input name="firstName" required /></label>
-          <label>Last Name <input name="lastName" required /></label>
-          <label>Phone <input name="phone" /></label>
-          <label>Email <input name="email" type="email" /></label>
-          <label>Home Type <input name="homeType" placeholder="Single-wide, Double-wide" /></label>
-          <label>Route <input name="route" placeholder="Austin -> Waco" /></label>
-          <label>Estimated Value <input name="estimatedValue" type="number" min="0" step="1000" /></label>
-          <label>Source
-            <select name="source">
-              <option>Facebook</option>
-              <option>TikTok</option>
-              <option>Instagram</option>
-              <option>Referral</option>
-              <option>Google</option>
-              <option>Walk-in</option>
-              <option>Other</option>
-            </select>
-          </label>
-          <label>Status
-            <select name="status">
-              <option>New</option>
-              <option>Contacted</option>
-              <option>Qualified</option>
-              <option>Proposal</option>
-              <option>Won</option>
-              <option>Lost</option>
-            </select>
-          </label>
-          <label>Move Date <input name="moveDate" type="date" /></label>
-          <label class="span-2">Transport Details <textarea name="transportDetails"></textarea></label>
-          <label class="span-2">Notes <textarea name="notes"></textarea></label>
-        </div>
+
+        <!-- Basic Info -->
+        <fieldset>
+          <legend>Contact Information</legend>
+          <div class="grid two-col">
+            <label>First Name * <input name="firstName" required /></label>
+            <label>Last Name * <input name="lastName" required /></label>
+            <label>Phone <input name="phone" placeholder="555-123-4567" /></label>
+            <label>Email <input name="email" type="email" placeholder="lead@example.com" /></label>
+            <label>Home Type <input name="homeType" placeholder="Single Wide, Double Wide…" /></label>
+            <label>Route <input name="route" placeholder="Austin → Waco" /></label>
+            <label>Estimated Value <input name="estimatedValue" type="number" min="0" step="1000" /></label>
+            <label>Source
+              <select name="source">
+                <option>Facebook</option>
+                <option>TikTok</option>
+                <option>Instagram</option>
+                <option>Referral</option>
+                <option>Google</option>
+                <option>Walk-in</option>
+                <option>Other</option>
+              </select>
+            </label>
+            <label>Pipeline Stage
+              <select name="status">
+                <option>New</option>
+                <option>Contacted</option>
+                <option>Qualified</option>
+                <option>Proposal</option>
+                <option>Won</option>
+                <option>Lost</option>
+              </select>
+            </label>
+            <label>Move Date <input name="moveDate" type="date" /></label>
+            <label class="span-2">Transport Details <textarea name="transportDetails"></textarea></label>
+            <label class="span-2">Notes <textarea name="notes"></textarea></label>
+          </div>
+        </fieldset>
+
+        <!-- Response Status -->
+        <fieldset>
+          <legend>Response Status</legend>
+          <p class="hint" style="margin:0 0 8px">How did this contact attempt go?</p>
+          <div class="response-btns" id="response-btns">
+            <button type="button" data-response="answered" class="response-btn">✓ Answered</button>
+            <button type="button" data-response="not_answered" class="response-btn">📵 Not Answered</button>
+            <button type="button" data-response="left_vm" class="response-btn">📬 Left VM</button>
+            <button type="button" data-response="text" class="response-btn">💬 Text</button>
+          </div>
+          <input type="hidden" name="responseStatus" id="responseStatus-input" />
+          <div id="recall-notice" class="recall-notice hidden">
+            ⏰ Recall campaign will be scheduled automatically (every 4 hrs, 7am–8pm for 5 days, then escalating)
+          </div>
+
+          <!-- Lead Status (shown when Answered) -->
+          <div id="lead-status-section" class="hidden" style="margin-top:12px">
+            <label>Lead Status
+              <select name="leadStatus" id="leadStatus-select">
+                <option value="">— Select —</option>
+                <option value="pending_info">Pending More Info</option>
+                <option value="completing_application">Completing Application</option>
+                <option value="appointment_set">Appointment Set</option>
+                <option value="answered">Answered</option>
+              </select>
+            </label>
+          </div>
+
+          <!-- Appointment fields (shown when Appointment Set) -->
+          <div id="appointment-section" class="hidden" style="margin-top:12px">
+            <div class="grid two-col">
+              <label>Appointment Date <input name="appointmentDate" type="date" /></label>
+              <label>Appointment Time <input name="appointmentTime" type="time" /></label>
+            </div>
+            <div class="hint" style="margin-top:6px">📧 Confirmation email template will be available to send from lead detail page.</div>
+          </div>
+        </fieldset>
+
+        <!-- Qualification -->
+        <fieldset>
+          <legend>Lead Qualification</legend>
+          <div class="qual-grid">
+            <div>
+              <p class="qual-label">Financing Options</p>
+              <label class="check-label"><input type="checkbox" name="financing" value="cash" /> Cash</label>
+              <label class="check-label"><input type="checkbox" name="financing" value="finance" /> Finance</label>
+              <label class="check-label"><input type="checkbox" name="financing" value="credit_repair" /> Credit Repair</label>
+            </div>
+            <div>
+              <p class="qual-label">Property</p>
+              <label class="check-label"><input type="checkbox" name="hasLand" /> Has Land</label>
+              <label class="check-label"><input type="checkbox" name="hasDownpayment" /> Has 5% Min Downpayment</label>
+            </div>
+            <div>
+              <p class="qual-label">Move Timeline</p>
+              <label class="check-label"><input type="radio" name="moveTimeline" value="90_days_or_less" /> Ready in 90 days or less</label>
+              <label class="check-label"><input type="radio" name="moveTimeline" value="3_6_months" /> 3–6 months</label>
+              <label class="check-label"><input type="radio" name="moveTimeline" value="not_ready" /> Not Ready</label>
+            </div>
+          </div>
+          <div id="longterm-notice" class="recall-notice hidden" style="border-color:#f0a500;background:#fffbe6;color:#7a5800">
+            📅 "Not Ready" leads are placed in the Long-Term Bucket with a monthly call task and drip email enrollment.
+          </div>
+        </fieldset>
+
+        <!-- Email Template Picker (new lead only) -->
+        <fieldset id="email-template-fieldset">
+          <legend>Send Initial Email</legend>
+          <p class="hint" style="margin:0 0 8px">Choose a template to send after saving this lead.</p>
+          <div id="template-picker"></div>
+          <input type="hidden" name="selectedTemplateId" id="selectedTemplateId-input" />
+        </fieldset>
+
         <menu>
-          <button value="cancel">Cancel</button>
-          <button id="save-lead-btn" value="default" class="primary">Save</button>
+          <button type="button" id="lead-cancel-btn">Cancel</button>
+          <button type="button" id="save-lead-btn" class="primary">Save Lead</button>
         </menu>
       </form>
+    </dialog>
+
+    <!-- Duplicate Warning Modal -->
+    <dialog id="dup-modal">
+      <div>
+        <h3>⚠️ Duplicate Lead Detected</h3>
+        <p>A lead with the same name, email, or phone already exists:</p>
+        <div id="dup-info" class="dup-info"></div>
+        <p class="hint">Only an admin can approve creating a duplicate entry.</p>
+        <div id="dup-admin-section" class="hidden">
+          <p><strong>Admin Override:</strong></p>
+          <label>Note (optional) <input id="dup-note" type="text" placeholder="Reason for allowing duplicate…" /></label>
+        </div>
+        <menu>
+          <button type="button" id="dup-reject-btn">Cancel Entry</button>
+          <button type="button" id="dup-approve-btn" class="primary hidden">✓ Approve &amp; Create</button>
+        </menu>
+      </div>
+    </dialog>
+
+    <!-- Email Compose Modal -->
+    <dialog id="email-modal">
+      <div style="min-width:500px;max-width:680px">
+        <h3 id="email-modal-title">Send Email</h3>
+        <div class="grid" style="gap:10px">
+          <label>Template
+            <select id="email-template-select">
+              <option value="">— Custom / No Template —</option>
+            </select>
+          </label>
+          <label>Subject <input id="email-subject" type="text" /></label>
+          <label>Body <textarea id="email-body" style="min-height:140px"></textarea></label>
+        </div>
+        <div class="hint" style="margin-top:6px">📧 Email is backend-ready. No external service integrated yet — this records the send.</div>
+        <menu>
+          <button type="button" id="email-cancel-btn">Cancel</button>
+          <button type="button" id="email-send-btn" class="primary">Record Send</button>
+        </menu>
+      </div>
+    </dialog>
+
+    <!-- Template Editor Modal -->
+    <dialog id="template-modal">
+      <div style="min-width:480px">
+        <h3 id="template-modal-title">New Email Template</h3>
+        <div class="grid" style="gap:10px">
+          <label>Template Name * <input id="tmpl-name" type="text" placeholder="e.g. Welcome Email" required /></label>
+          <label>Type
+            <select id="tmpl-type">
+              <option value="welcome">Welcome</option>
+              <option value="followup">Follow-Up</option>
+              <option value="appointment">Appointment</option>
+              <option value="drip">Drip Campaign</option>
+              <option value="custom">Custom</option>
+            </select>
+          </label>
+          <label>Subject * <input id="tmpl-subject" type="text" placeholder="Hi {{firstName}}!" required /></label>
+          <label>Body *
+            <textarea id="tmpl-body" style="min-height:160px" placeholder="Use {{firstName}}, {{lastName}}, {{homeType}}, {{route}}, {{estimatedValue}}, {{appointmentDate}}, {{appointmentTime}}, {{agentName}}"></textarea>
+          </label>
+          <p class="hint">Available variables: <code>{{firstName}}</code> <code>{{lastName}}</code> <code>{{homeType}}</code> <code>{{route}}</code> <code>{{estimatedValue}}</code> <code>{{appointmentDate}}</code> <code>{{appointmentTime}}</code> <code>{{agentName}}</code></p>
+        </div>
+        <menu>
+          <button type="button" id="tmpl-cancel-btn">Cancel</button>
+          <button type="button" id="tmpl-save-btn" class="primary">Save Template</button>
+        </menu>
+      </div>
     </dialog>
 
     <script src="/app.js"></script>

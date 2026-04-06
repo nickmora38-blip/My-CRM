@@ -3,12 +3,14 @@
     "id": "user-1",
     "email": "demo@crm.local",
     "name": "Demo User",
-    "passwordHash": "$2a$10$UyQOLeQV6bBRjmkARwd2BOWnsViIazZRwCutVxENfAqKNWr2zxybu"
+    "passwordHash": "$2a$10$UyQOLeQV6bBRjmkARwd2BOWnsViIazZRwCutVxENfAqKNWr2zxybu",
+    "isAdmin": true
   },
   "alex@crm.local": {
     "id": "user-2",
     "email": "alex@crm.local",
     "name": "Alex Morgan",
-    "passwordHash": "$2a$10$jNtYqxJ8rvK.YGkNNrrrEuG3aOg.y2Pnkdj0ojkO4wRjYyhaErYai"
+    "passwordHash": "$2a$10$jNtYqxJ8rvK.YGkNNrrrEuG3aOg.y2Pnkdj0ojkO4wRjYyhaErYai",
+    "isAdmin": false
   }
 }

@@ -1,0 +1,30 @@
+[
+  {
+    "id": "tmpl_welcome",
+    "name": "Welcome / Initial Follow-Up",
+    "subject": "Thank you for your interest, {{firstName}}!",
+    "body": "Hi {{firstName}},\n\nThank you for reaching out! We're excited to help you find your perfect manufactured home.\n\nHere's a quick summary of what we discussed:\n- Home Type: {{homeType}}\n- Route: {{route}}\n\nWe'll be in touch shortly to discuss the next steps.\n\nBest regards,\n{{agentName}}",
+    "type": "welcome"
+  },
+  {
+    "id": "tmpl_followup",
+    "name": "Follow-Up / Check-In",
+    "subject": "Following up on your home inquiry, {{firstName}}",
+    "body": "Hi {{firstName}},\n\nI wanted to follow up and see if you have any questions about your home transport inquiry.\n\nAs a reminder, we're here to help with:\n- {{homeType}} transport\n- Route: {{route}}\n- Estimated value: {{estimatedValue}}\n\nPlease don't hesitate to reach out. I'm available to answer any questions.\n\nBest regards,\n{{agentName}}",
+    "type": "followup"
+  },
+  {
+    "id": "tmpl_appointment",
+    "name": "Appointment Confirmation",
+    "subject": "Your appointment is confirmed, {{firstName}}!",
+    "body": "Hi {{firstName}},\n\nYour appointment has been confirmed!\n\n📅 Date: {{appointmentDate}}\n🕐 Time: {{appointmentTime}}\n\nPlease let us know if you need to reschedule. We look forward to speaking with you!\n\nBest regards,\n{{agentName}}",
+    "type": "appointment"
+  },
+  {
+    "id": "tmpl_drip1",
+    "name": "Drip Campaign - Month 1",
+    "subject": "Still thinking about your home move, {{firstName}}?",
+    "body": "Hi {{firstName}},\n\nWe wanted to check in and see if your home transport plans have progressed.\n\nWe're still here to help whenever you're ready! Our team specializes in {{homeType}} transport and would love to assist you.\n\nGive us a call or reply to this email to reconnect.\n\nBest regards,\n{{agentName}}",
+    "type": "drip"
+  }
+]
