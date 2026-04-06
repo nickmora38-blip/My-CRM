@@ -202,7 +202,7 @@ function authMiddleware(req, res, next) {
 function adminMiddleware(req, res, next) {
   const users = readUsers();
   const userRecord = Object.values(users).find((u) => u.id === req.user.sub);
-  if (!userRecord || (!userRecord.isAdmin && userRecord.role !== 'admin')) {
+  if (!isAdminUser(userRecord)) {
     return res.status(403).json({ error: 'Admin access required' });
   }
   req.isAdmin = true;
@@ -461,16 +461,16 @@ app.post('/api/auth/register', (req, res) => {
   const { email, password, name } = req.body;
   if (!email || !password) return res.status(400).json({ error: 'Email and password are required' });
   if (password.length < 6) return res.status(400).json({ error: 'Password must be at least 6 characters' });
-  const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+  const emailRegex = /^[a-zA-Z0-9._%+\-]+@[a-zA-Z0-9.\-]+\.[a-zA-Z]{2,}$/;
   if (!emailRegex.test(email)) return res.status(400).json({ error: 'Invalid email format' });
 
   const users = readUsers();
   if (users[email]) return res.status(409).json({ error: 'Email already registered' });
 
-  const userId = `user_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+  const userId = `user_${crypto.randomUUID()}`;
   const passwordHash = bcrypt.hashSync(password, 10);
   // First registered user beyond demo becomes admin if no other admin exists
-  const hasAdmin = Object.values(users).some((u) => u.isAdmin || u.role === 'admin');
+  const hasAdmin = Object.values(users).some(isAdminUser);
   const isAdmin = !hasAdmin;
   const role = isAdmin ? 'admin' : 'phc';
   users[email] = {
@@ -493,7 +493,7 @@ app.post('/api/auth/register', (req, res) => {
 app.get('/api/auth/me', authMiddleware, (req, res) => {
   const users = readUsers();
   const userRecord = Object.values(users).find((u) => u.id === req.user.sub);
-  const isAdmin = userRecord ? (userRecord.isAdmin || userRecord.role === 'admin') : false;
+  const isAdmin = isAdminUser(userRecord);
   const role = userRecord ? (userRecord.role || (isAdmin ? 'admin' : 'phc')) : 'phc';
   res.json({ user: { ...req.user, isAdmin, role } });
 });
@@ -880,7 +880,7 @@ app.post('/api/admin/users', (req, res) => {
   const { email, password, name, role } = req.body;
   if (!email || !password) return res.status(400).json({ error: 'Email and password are required' });
   if (password.length < 6) return res.status(400).json({ error: 'Password must be at least 6 characters' });
-  const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+  const emailRegex = /^[a-zA-Z0-9._%+\-]+@[a-zA-Z0-9.\-]+\.[a-zA-Z]{2,}$/;
   if (!emailRegex.test(email)) return res.status(400).json({ error: 'Invalid email format' });
   const validRoles = ['admin', 'phc'];
   const assignedRole = validRoles.includes(role) ? role : 'phc';
@@ -888,7 +888,7 @@ app.post('/api/admin/users', (req, res) => {
   const users = readUsers();
   if (users[email]) return res.status(409).json({ error: 'Email already registered' });
 
-  const userId = `user_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+  const userId = `user_${crypto.randomUUID()}`;
   const passwordHash = bcrypt.hashSync(password, 10);
   const isAdmin = assignedRole === 'admin';
   users[email] = {
@@ -965,7 +965,7 @@ app.post('/api/admin/approve-duplicate', (req, res) => {
     leads[idx].leadOwnerName = newOwner.name;
     leads[idx].duplicateMergeHistory = [
       ...(leads[idx].duplicateMergeHistory || []),
-      { mergedAt: new Date().toISOString(), action: 'change_owner', changedBy: req.user.sub, newOwner: newOwner.id, note: note || 'Admin changed lead owner via duplicate review' }
+      { mergedAt: new Date().toISOString(), action: 'change_owner', actionedBy: req.user.sub, newOwner: newOwner.id, note: note || 'Admin changed lead owner via duplicate review' }
     ];
     leads[idx].updatedAt = new Date().toISOString();
     writeLeads(leads);
@@ -992,7 +992,7 @@ app.post('/api/admin/approve-duplicate', (req, res) => {
     merged.updatedAt = now;
     merged.duplicateMergeHistory = [
       ...(existing.duplicateMergeHistory || []),
-      { mergedAt: now, action: 'merge', mergedBy: req.user.sub, note: note || 'Admin merged duplicate entry' }
+      { mergedAt: now, action: 'merge', actionedBy: req.user.sub, note: note || 'Admin merged duplicate entry' }
     ];
     leads[idx] = merged;
     writeLeads(leads);
@@ -1026,7 +1026,7 @@ app.post('/api/admin/approve-duplicate', (req, res) => {
     contactAttempts: 0,
     emailsSent: [],
     isDead: false,
-    duplicateMergeHistory: [{ mergedAt: now, action: 'allow', approvedBy: req.user.sub, note: note || 'Admin approved duplicate entry' }],
+    duplicateMergeHistory: [{ mergedAt: now, action: 'allow', actionedBy: req.user.sub, note: note || 'Admin approved duplicate entry' }],
     createdAt: now,
     updatedAt: now
   };
@@ -1071,7 +1071,7 @@ app.put('/api/admin/leads/:id/transfer', (req, res) => {
   leads[idx].leadOwnerName = newOwner.name;
   leads[idx].duplicateMergeHistory = [
     ...(leads[idx].duplicateMergeHistory || []),
-    { mergedAt: new Date().toISOString(), transferredBy: req.user.sub, newOwner: newOwner.id, note: 'Lead transferred by admin' }
+    { mergedAt: new Date().toISOString(), action: 'transfer', actionedBy: req.user.sub, newOwner: newOwner.id, note: 'Lead transferred by admin' }
   ];
   leads[idx].updatedAt = new Date().toISOString();
   writeLeads(leads);

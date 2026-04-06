@@ -153,6 +153,10 @@ function currency(value) {
   return new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 0 }).format(Number(value || 0));
 }
 
+function currentUserIsAdmin() {
+  return !!(state.user && (state.user.isAdmin || state.user.role === 'admin'));
+}
+
 function isDetailRoute() {
   return /^\/leads\/.+/.test(window.location.pathname);
 }
@@ -285,7 +289,7 @@ function createStatusPicker(leadId) {
 // ─── Table render ─────────────────────────────────────────────────────────────
 
 function renderTable(rows) {
-  const isAdmin = state.user && (state.user.isAdmin || state.user.role === 'admin');
+  const isAdmin = currentUserIsAdmin();
   const table = document.createElement('table');
   table.innerHTML = `
     <thead>
@@ -311,7 +315,7 @@ function renderTable(rows) {
 
   rows.forEach((lead) => {
     const isOwner = state.user && lead.leadOwner === state.user.id;
-    const isAdmin = state.user && (state.user.isAdmin || state.user.role === 'admin');
+    const isAdmin = currentUserIsAdmin();
     const canEdit = isOwner || isAdmin;
 
     const recallCell = lead.isDead
@@ -401,7 +405,7 @@ function renderBoard(rows) {
     leads.forEach((lead) => {
       const card = document.createElement('article');
       card.className = 'lead-card';
-      const isAdmin = state.user && (state.user.isAdmin || state.user.role === 'admin');
+      const isAdmin = currentUserIsAdmin();
       card.innerHTML = `
         <strong>${escHtml(lead.firstName)} ${escHtml(lead.lastName)}</strong>
         ${lead.isDead ? '<span class="badge badge-red">Dead</span>' : ''}
@@ -428,7 +432,7 @@ function detailCard(title, body) {
 
 function renderLeadDetail(lead) {
   const isOwner = state.user && lead.leadOwner === state.user.id;
-  const isAdmin = state.user && (state.user.isAdmin || state.user.role === 'admin');
+  const isAdmin = currentUserIsAdmin();
   const canEdit = isOwner || isAdmin;
 
   const pipelineButtons = PIPELINE.filter((s) => s !== 'Lost')
@@ -604,7 +608,7 @@ function render() {
   }
   els.loginPanel.classList.add('hidden');
   els.appPanel.classList.remove('hidden');
-  const isAdmin = state.user && (state.user.isAdmin || state.user.role === 'admin');
+  const isAdmin = currentUserIsAdmin();
   const roleLabel = isAdmin ? '🔑 Admin' : '👤 PHC';
   els.userLine.textContent = state.user
     ? `${state.user.name} (${state.user.email}) — ${roleLabel}`
@@ -1006,7 +1010,7 @@ async function sendEmailFromTemplate(lead, templateId) {
 
 function openDuplicateModal(duplicates, newLeadData) {
   state.pendingDuplicates = duplicates;
-  const isAdmin = state.user && (state.user.isAdmin || state.user.role === 'admin');
+  const isAdmin = currentUserIsAdmin();
 
   // Build side-by-side comparison for the first duplicate
   const existing = duplicates[0];
@@ -1020,7 +1024,7 @@ function openDuplicateModal(duplicates, newLeadData) {
     ['Home Type', existing.homeType, newLead.homeType],
     ['Route', existing.route, newLead.route],
     ['Source', existing.source, newLead.source],
-    ['Entry User', existing.leadOwnerName, 'You'],
+    ['Entry User', existing.leadOwnerName, state.user ? state.user.name : 'You'],
   ];
 
   const tableRows = fields.map(([label, existVal, newVal]) => {
@@ -1273,9 +1277,8 @@ async function initializeAuthedState() {
   try {
     const me = await api('/api/auth/me');
     state.user = me.user;
-    const isAdmin = me.user && (me.user.isAdmin || me.user.role === 'admin');
     const loaders = [loadLeads(), loadTemplates(), loadTasks()];
-    if (isAdmin) loaders.push(loadUsers());
+    if (currentUserIsAdmin()) loaders.push(loadUsers());
     await Promise.all(loaders);
     render();
   } catch (error) {
@@ -1296,9 +1299,8 @@ els.loginForm.addEventListener('submit', async (event) => {
     state.token = result.token;
     state.user = result.user;
     localStorage.setItem('crm_token', state.token);
-    const isAdmin = result.user && (result.user.isAdmin || result.user.role === 'admin');
     const loaders = [loadLeads(), loadTemplates(), loadTasks()];
-    if (isAdmin) loaders.push(loadUsers());
+    if (currentUserIsAdmin()) loaders.push(loadUsers());
     await Promise.all(loaders);
     nav('/');
   } catch (error) { alert(error.message); }
@@ -1312,9 +1314,8 @@ els.registerForm.addEventListener('submit', async (event) => {
     state.token = result.token;
     state.user = result.user;
     localStorage.setItem('crm_token', state.token);
-    const isAdmin = result.user && (result.user.isAdmin || result.user.role === 'admin');
     const loaders = [loadLeads(), loadTemplates(), loadTasks()];
-    if (isAdmin) loaders.push(loadUsers());
+    if (currentUserIsAdmin()) loaders.push(loadUsers());
     await Promise.all(loaders);
     nav('/');
   } catch (error) { alert(error.message); }
