@@ -677,3 +677,171 @@ code {
   font-size: 0.75rem;
   margin-left: 2px;
 }
+
+/* ─── Tab navigation ──────────────────────────────────────────────── */
+.contacts-pipeline-bar, .month-tabs {
+  display: flex;
+  gap: 6px;
+  padding: 12px 16px;
+  overflow-x: auto;
+  border-bottom: 1px solid var(--border);
+  flex-wrap: wrap;
+}
+
+.pipe-tab {
+  padding: 5px 14px;
+  border-radius: 20px;
+  font-size: 0.82rem;
+  cursor: pointer;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  color: var(--muted);
+  transition: all 0.15s;
+  white-space: nowrap;
+}
+
+.pipe-tab.active {
+  background: #dc143c;
+  border-color: #dc143c;
+  color: #fff;
+}
+
+.pipe-tab:hover:not(.active) {
+  border-color: #dc143c;
+  color: var(--text);
+}
+
+/* ─── Contacts board ──────────────────────────────────────────────── */
+.contacts-board {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  gap: 16px;
+  padding: 16px;
+}
+
+.contact-col {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 12px;
+  min-height: 200px;
+}
+
+.contact-col-header {
+  margin: 0 0 12px;
+  font-size: 0.9rem;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.contact-card {
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 10px;
+  margin-bottom: 8px;
+  transition: border-color 0.15s;
+}
+
+.contact-card:hover {
+  border-color: #dc143c;
+}
+
+.contact-card-header {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 4px;
+  flex-wrap: wrap;
+}
+
+.count-badge {
+  background: #dc143c;
+  color: #fff;
+  font-size: 0.75rem;
+  padding: 1px 7px;
+  border-radius: 10px;
+  font-weight: 600;
+}
+
+/* ─── Checklist grid ──────────────────────────────────────────────── */
+.checklist-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+  gap: 16px;
+}
+
+.checklist-section {
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 12px;
+}
+
+.checklist-item {
+  margin-bottom: 6px;
+}
+
+.checklist-item label {
+  font-size: 0.85rem;
+}
+
+.checklist-item select {
+  margin-left: 6px;
+  padding: 2px 6px;
+  font-size: 0.82rem;
+  background: var(--surface);
+  color: var(--text);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+}
+
+/* ─── Pipeline report ─────────────────────────────────────────────── */
+.pipeline-report-table {
+  width: 100%;
+  border-collapse: collapse;
+  margin: 0;
+}
+
+.pipeline-report-table th, .pipeline-report-table td {
+  padding: 8px 12px;
+  border-bottom: 1px solid var(--border);
+  text-align: left;
+  font-size: 0.87rem;
+}
+
+.pipeline-report-table th {
+  background: var(--surface);
+  font-weight: 600;
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  font-size: 0.75rem;
+}
+
+.pipeline-row-active td:first-child {
+  color: var(--text);
+  font-weight: 600;
+}
+
+.pipeline-bar-wrap {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.pipeline-bar-fill {
+  height: 6px;
+  background: #dc143c;
+  border-radius: 3px;
+  min-width: 2px;
+  max-width: 120px;
+  transition: width 0.3s;
+}
+
+.pipeline-bar-wrap span {
+  font-size: 0.8rem;
+  color: var(--muted);
+  white-space: nowrap;
+}

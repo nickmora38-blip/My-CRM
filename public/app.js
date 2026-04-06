@@ -36,8 +36,18 @@ const state = {
   pendingLeadPayload: null,   // held during duplicate check
   pendingDuplicates: [],      // duplicates found during check
   emailTargetLeadId: null,
+  emailTargetType: null,
   editingTemplateId: null,
-  editingUserId: null
+  editingUserId: null,
+  contacts: [],
+  activeCustomers: [],
+  contactsFilter: 'all',
+  acFilter: 'all',
+  editingContactId: null,
+  editingCustomerId: null,
+  docUploadTargetId: null,
+  docUploadTargetType: null,
+  pipelineActiveMonth: null
 };
 
 const els = {
@@ -132,7 +142,52 @@ const els = {
   userPasswordWrap: document.getElementById('user-password-wrap'),
   userRole: document.getElementById('user-role'),
   userCancelBtn: document.getElementById('user-cancel-btn'),
-  userSaveBtn: document.getElementById('user-save-btn')
+  userSaveBtn: document.getElementById('user-save-btn'),
+  // Contacts panel
+  contactsBtn: document.getElementById('contacts-btn'),
+  contactsPanel: document.getElementById('contacts-panel'),
+  contactsList: document.getElementById('contacts-list'),
+  contactsCloseBtn: document.getElementById('contacts-close-btn'),
+  newContactBtn: document.getElementById('new-contact-btn'),
+  contactsPipelineBar: document.getElementById('contacts-pipeline-bar'),
+  // Active customers panel
+  activeCustomersBtn: document.getElementById('active-customers-btn'),
+  activeCustomersPanel: document.getElementById('active-customers-panel'),
+  activeCustomersList: document.getElementById('active-customers-list'),
+  activeCustomersCloseBtn: document.getElementById('active-customers-close-btn'),
+  acStatusFilterBar: document.getElementById('ac-status-filter-bar'),
+  // Pipeline panel
+  pipelineBtn: document.getElementById('pipeline-btn'),
+  pipelinePanel: document.getElementById('pipeline-panel'),
+  pipelineCloseBtn: document.getElementById('pipeline-close-btn'),
+  pipelineMonthTabs: document.getElementById('pipeline-month-tabs'),
+  pipelineReportContent: document.getElementById('pipeline-report-content'),
+  // Contact modal
+  contactModal: document.getElementById('contact-modal'),
+  contactModalTitle: document.getElementById('contact-modal-title'),
+  contactFirstName: document.getElementById('contact-firstName'),
+  contactLastName: document.getElementById('contact-lastName'),
+  contactPhone: document.getElementById('contact-phone'),
+  contactEmail: document.getElementById('contact-email'),
+  contactHomeType: document.getElementById('contact-homeType'),
+  contactRoute: document.getElementById('contact-route'),
+  contactPipelineStatus: document.getElementById('contact-pipelineStatus'),
+  contactSource: document.getElementById('contact-source'),
+  contactNotes: document.getElementById('contact-notes'),
+  contactCancelBtn: document.getElementById('contact-cancel-btn'),
+  contactSaveBtn: document.getElementById('contact-save-btn'),
+  // Contact detail modal
+  contactDetailModal: document.getElementById('contact-detail-modal'),
+  contactDetailContent: document.getElementById('contact-detail-content'),
+  // Active customer detail modal
+  acDetailModal: document.getElementById('ac-detail-modal'),
+  acDetailContent: document.getElementById('ac-detail-content'),
+  // Document upload modal
+  docUploadModal: document.getElementById('doc-upload-modal'),
+  docCategory: document.getElementById('doc-category'),
+  docFileInput: document.getElementById('doc-file-input'),
+  docUploadCancelBtn: document.getElementById('doc-upload-cancel-btn'),
+  docUploadSaveBtn: document.getElementById('doc-upload-save-btn')
 };
 
 // ─── API helper ───────────────────────────────────────────────────────────────
@@ -470,6 +525,7 @@ function renderLeadDetail(lead) {
         ${canEdit ? '<button id="edit-btn">✏️ Edit</button>' : ''}
         <button id="send-email-btn" class="primary">✉️ Send Email</button>
         ${canEdit ? '<button id="record-contact-btn">📞 Record Contact</button>' : ''}
+        ${canEdit ? '<button id="move-to-contacts-btn">👥 Move to Contacts</button>' : ''}
         ${isAdmin ? '<button id="delete-btn" class="danger-btn">🗑️ Delete</button>' : ''}
         ${isAdmin ? `<button id="admin-transfer-btn">🔁 Reassign</button>` : ''}
       </div>
@@ -541,6 +597,16 @@ function renderLeadDetail(lead) {
   }
 
   els.detailView.querySelector('#send-email-btn').addEventListener('click', () => openEmailModal(lead));
+
+  if (canEdit) {
+    const moveToContactsBtn = els.detailView.querySelector('#move-to-contacts-btn');
+    if (moveToContactsBtn) {
+      moveToContactsBtn.addEventListener('click', () => {
+        nav('/');
+        openContactModal(null, lead);
+      });
+    }
+  }
 
   if (isAdmin) {
     els.detailView.querySelector('#admin-transfer-btn').addEventListener('click', async () => {
@@ -1150,6 +1216,7 @@ els.dupOwnerBtn.addEventListener('click', async () => {
 
 function openEmailModal(lead) {
   state.emailTargetLeadId = lead.id;
+  state.emailTargetType = 'lead';
   els.emailModalTitle.textContent = `Email — ${lead.firstName} ${lead.lastName}`;
   els.emailSubject.value = '';
   els.emailBody.value = '';
@@ -1194,17 +1261,32 @@ els.emailSendBtn.addEventListener('click', async () => {
   const body = els.emailBody.value.trim();
   if (!subject || !body) { alert('Subject and body are required'); return; }
   try {
-    await api(`/api/leads/${state.emailTargetLeadId}/send-email`, {
+    const targetType = state.emailTargetType || 'lead';
+    let endpoint;
+    if (targetType === 'contact') {
+      endpoint = `/api/contacts/${state.emailTargetLeadId}/send-email`;
+    } else if (targetType === 'customer') {
+      endpoint = `/api/active-customers/${state.emailTargetLeadId}/send-email`;
+    } else {
+      endpoint = `/api/leads/${state.emailTargetLeadId}/send-email`;
+    }
+    await api(endpoint, {
       method: 'POST',
       body: JSON.stringify({ templateId: els.emailTemplateSelect.value || null, subject, body })
     });
-    await loadLeads();
-    els.emailModal.close();
-    // Re-render detail if we're on detail page
-    if (isDetailRoute()) {
-      const lead = state.leads.find((l) => l.id === state.emailTargetLeadId);
-      if (lead) renderLeadDetail(lead);
+    if (targetType === 'lead') {
+      await loadLeads();
+      // Re-render detail if we're on detail page
+      if (isDetailRoute()) {
+        const lead = state.leads.find((l) => l.id === state.emailTargetLeadId);
+        if (lead) renderLeadDetail(lead);
+      }
+    } else if (targetType === 'contact') {
+      await loadContacts();
+    } else {
+      await loadActiveCustomers();
     }
+    els.emailModal.close();
     alert('Email recorded successfully!');
   } catch (err) {
     alert(err.message);
@@ -1291,6 +1373,738 @@ async function initializeAuthedState() {
 
 // ─── Event listeners ──────────────────────────────────────────────────────────
 
+// ─── Contacts data ────────────────────────────────────────────────────────────
+
+async function loadContacts() {
+  const data = await api('/api/contacts');
+  state.contacts = data.contacts || [];
+}
+
+async function loadActiveCustomers() {
+  const data = await api('/api/active-customers');
+  state.activeCustomers = data.customers || [];
+}
+
+// ─── Contacts panel ───────────────────────────────────────────────────────────
+
+const CONTACT_PIPELINE = ['Call Back Scheduled', 'Appointment Set', 'Application Sent'];
+
+const ACTIVE_CUSTOMER_STATUSES_LIST = [
+  'Contact Status', 'App Submitted', 'Approved', 'Pending Conditions', 'Ready to Close',
+  'Appraisal', 'Docs Ordered', 'Closed Pending Delivery', 'Delivered Pending Funding',
+  'Funded', 'Trimout Pending', 'Trimmed Out Pending Addl Work', 'Completed', 'Closed'
+];
+
+const LENDERS = ['21ST', 'CPM', 'Triad', 'CUHU', 'Cash', 'Other', 'CSL', 'Calcon'];
+
+function renderContactsPanel() {
+  const filter = state.contactsFilter;
+  const contacts = filter === 'all'
+    ? state.contacts
+    : state.contacts.filter((c) => c.pipelineStatus === filter);
+
+  els.contactsPipelineBar.querySelectorAll('.pipe-tab').forEach((tab) => {
+    tab.classList.toggle('active', tab.dataset.stage === filter);
+  });
+
+  els.contactsList.innerHTML = '';
+
+  if (contacts.length === 0) {
+    els.contactsList.innerHTML = '<p class="muted" style="padding:12px">No contacts found. Move a lead to contacts or create a new contact.</p>';
+    return;
+  }
+
+  const boardWrap = document.createElement('div');
+  boardWrap.className = 'contacts-board';
+
+  const stages = filter === 'all' ? CONTACT_PIPELINE : [filter];
+  stages.forEach((stage) => {
+    const col = document.createElement('div');
+    col.className = 'contact-col';
+    const stageContacts = contacts.filter((c) => c.pipelineStatus === stage);
+    col.innerHTML = `<h4 class="contact-col-header">${escHtml(stage)} <span class="count-badge">${stageContacts.length}</span></h4>`;
+
+    stageContacts.forEach((contact) => {
+      const card = document.createElement('article');
+      card.className = 'contact-card';
+      card.innerHTML = `
+        <div class="contact-card-header">
+          <strong>${escHtml(contact.firstName)} ${escHtml(contact.lastName)}</strong>
+          ${contact.promotedToCustomer ? '<span class="badge badge-green" title="Promoted to Active Customer">⭐ Customer</span>' : ''}
+        </div>
+        <p class="muted" style="font-size:0.85rem">${escHtml(contact.phone || '-')} &nbsp;|&nbsp; ${escHtml(contact.source || '-')}</p>
+        ${contact.homeType ? `<p style="font-size:0.85rem">${escHtml(contact.homeType)}</p>` : ''}
+        ${contact.route ? `<p style="font-size:0.85rem">📍 ${escHtml(contact.route)}</p>` : ''}
+        <p class="muted" style="font-size:0.75rem">Owner: ${escHtml(contact.ownerName || '-')}</p>
+        <div class="card-actions" style="margin-top:8px;display:flex;gap:6px;flex-wrap:wrap">
+          <button type="button" data-view-contact="${escHtml(contact.id)}" style="font-size:0.75rem;padding:3px 8px">View</button>
+          ${!contact.promotedToCustomer ? `<button type="button" data-promote-contact="${escHtml(contact.id)}" class="primary" style="font-size:0.75rem;padding:3px 8px">⭐ Promote</button>` : ''}
+        </div>
+      `;
+      col.appendChild(card);
+    });
+
+    boardWrap.appendChild(col);
+  });
+
+  els.contactsList.appendChild(boardWrap);
+
+  els.contactsList.querySelectorAll('[data-view-contact]').forEach((btn) => {
+    btn.addEventListener('click', () => openContactDetail(btn.dataset.viewContact));
+  });
+  els.contactsList.querySelectorAll('[data-promote-contact]').forEach((btn) => {
+    btn.addEventListener('click', () => promoteContactToCustomer(btn.dataset.promoteContact));
+  });
+}
+
+async function promoteContactToCustomer(contactId) {
+  if (!window.confirm('Promote this contact to an Active Customer?')) return;
+  try {
+    const result = await api(`/api/contacts/${contactId}/promote`, { method: 'POST' });
+    await Promise.all([loadContacts(), loadActiveCustomers()]);
+    renderContactsPanel();
+    alert(`${result.customer.firstName} ${result.customer.lastName} has been promoted to Active Customer!`);
+  } catch (err) {
+    alert(err.message);
+  }
+}
+
+function openContactDetail(contactId) {
+  const contact = state.contacts.find((c) => c.id === contactId);
+  if (!contact) return;
+  renderContactDetailModal(contact);
+  els.contactDetailModal.showModal();
+}
+
+function renderContactDetailModal(contact) {
+  const isOwner = state.user && contact.owner === state.user.id;
+  const isAdmin = currentUserIsAdmin();
+  const canEdit = isOwner || isAdmin;
+
+  els.contactDetailContent.innerHTML = `
+    <div class="toolbar" style="margin-bottom:16px">
+      <div>
+        <h3 style="margin:0">${escHtml(contact.firstName)} ${escHtml(contact.lastName)}</h3>
+        <p class="muted" style="margin:0">${escHtml(contact.pipelineStatus)} &nbsp;|&nbsp; Owner: ${escHtml(contact.ownerName || '-')}</p>
+      </div>
+      <div class="toolbar-actions">
+        ${canEdit ? `<button type="button" id="contact-detail-edit-btn" data-id="${escHtml(contact.id)}">✏️ Edit</button>` : ''}
+        <button type="button" id="contact-detail-email-btn" class="primary">✉️ Email</button>
+        <button type="button" id="contact-detail-docs-btn">📎 Documents</button>
+        ${isAdmin ? `<button type="button" id="contact-detail-delete-btn" class="danger-btn">🗑️ Delete</button>` : ''}
+        <button type="button" id="contact-detail-close-btn">✕ Close</button>
+      </div>
+    </div>
+
+    <div class="pipeline" style="margin-bottom:16px">
+      ${CONTACT_PIPELINE.map((s) => `<button type="button" data-contact-stage="${escHtml(s)}" class="${contact.pipelineStatus === s ? 'active' : ''}" ${!canEdit ? 'disabled' : ''}>${escHtml(s)}</button>`).join('')}
+    </div>
+
+    <div class="detail-grid">
+      <article class="card">
+        <h4>Contact Info</h4>
+        <p><strong>Phone:</strong> ${escHtml(contact.phone || '-')}</p>
+        <p><strong>Email:</strong> ${escHtml(contact.email || '-')}</p>
+        <p><strong>Source:</strong> ${escHtml(contact.source || '-')}</p>
+        <p><strong>Home Type:</strong> ${escHtml(contact.homeType || '-')}</p>
+        <p><strong>Route:</strong> ${escHtml(contact.route || '-')}</p>
+      </article>
+      <article class="card">
+        <h4>Status</h4>
+        <p><strong>Pipeline:</strong> <span class="badge badge-blue">${escHtml(contact.pipelineStatus)}</span></p>
+        <p><strong>Created:</strong> ${new Date(contact.createdAt).toLocaleDateString()}</p>
+        ${contact.fromLeadId ? `<p><strong>From Lead:</strong> <a href="#" data-lead-link="${escHtml(contact.fromLeadId)}">View original lead</a></p>` : ''}
+        ${contact.promotedToCustomer ? '<p><span class="badge badge-green">⭐ Promoted to Active Customer</span></p>' : ''}
+      </article>
+      ${contact.notes ? `<article class="card" style="grid-column:1/-1"><h4>Notes</h4><p>${escHtml(contact.notes).replace(/\n/g, '<br>')}</p></article>` : ''}
+      ${Array.isArray(contact.emailsSent) && contact.emailsSent.length > 0 ? `
+        <article class="card" style="grid-column:1/-1">
+          <h4>Email History</h4>
+          ${contact.emailsSent.map((e) => `<div class="email-record"><strong>${escHtml(e.subject)}</strong> <span class="muted">${new Date(e.sentAt).toLocaleString()}</span></div>`).join('')}
+        </article>` : ''}
+    </div>
+
+    <div id="contact-docs-section" class="hidden" style="margin-top:16px">
+      <div class="toolbar" style="margin-bottom:8px">
+        <h4 style="margin:0">Documents</h4>
+        <button type="button" id="contact-upload-doc-btn" class="primary" style="font-size:0.85rem">+ Upload Document</button>
+      </div>
+      <div id="contact-docs-list"></div>
+    </div>
+  `;
+
+  els.contactDetailContent.querySelector('#contact-detail-close-btn').addEventListener('click', () => els.contactDetailModal.close());
+
+  if (canEdit) {
+    els.contactDetailContent.querySelector('#contact-detail-edit-btn').addEventListener('click', () => {
+      els.contactDetailModal.close();
+      openContactModal(contact);
+    });
+  }
+
+  els.contactDetailContent.querySelectorAll('[data-contact-stage]').forEach((btn) => {
+    if (btn.disabled) return;
+    btn.addEventListener('click', async () => {
+      const stage = btn.dataset.contactStage;
+      await api(`/api/contacts/${contact.id}`, { method: 'PUT', body: JSON.stringify({ pipelineStatus: stage }) });
+      await loadContacts();
+      const updated = state.contacts.find((c) => c.id === contact.id);
+      if (updated) renderContactDetailModal(updated);
+      renderContactsPanel();
+    });
+  });
+
+  els.contactDetailContent.querySelector('#contact-detail-email-btn').addEventListener('click', () => {
+    openContactEmailModal(contact);
+  });
+
+  const deleteBtn = els.contactDetailContent.querySelector('#contact-detail-delete-btn');
+  if (deleteBtn) {
+    deleteBtn.addEventListener('click', async () => {
+      if (!window.confirm('Delete this contact? This cannot be undone.')) return;
+      await api(`/api/contacts/${contact.id}`, { method: 'DELETE' });
+      await loadContacts();
+      els.contactDetailModal.close();
+      renderContactsPanel();
+    });
+  }
+
+  els.contactDetailContent.querySelector('#contact-detail-docs-btn').addEventListener('click', async () => {
+    const section = els.contactDetailContent.querySelector('#contact-docs-section');
+    section.classList.toggle('hidden');
+    if (!section.classList.contains('hidden')) {
+      await renderDocumentsList(contact.id, els.contactDetailContent.querySelector('#contact-docs-list'));
+    }
+  });
+
+  const uploadDocBtn = els.contactDetailContent.querySelector('#contact-upload-doc-btn');
+  if (uploadDocBtn) {
+    uploadDocBtn.addEventListener('click', () => openDocUploadModal(contact.id, 'contact'));
+  }
+
+  const leadLink = els.contactDetailContent.querySelector('[data-lead-link]');
+  if (leadLink) {
+    leadLink.addEventListener('click', (e) => {
+      e.preventDefault();
+      els.contactDetailModal.close();
+      nav(`/leads/${leadLink.dataset.leadLink}`);
+    });
+  }
+}
+
+function openContactEmailModal(contact) {
+  state.emailTargetLeadId = contact.id;
+  state.emailTargetType = 'contact';
+  els.emailModalTitle.textContent = `Email — ${contact.firstName} ${contact.lastName}`;
+  els.emailSubject.value = '';
+  els.emailBody.value = '';
+
+  els.emailTemplateSelect.innerHTML = '<option value="">— Custom / No Template —</option>';
+  state.templates.forEach((tmpl) => {
+    const opt = document.createElement('option');
+    opt.value = tmpl.id;
+    opt.textContent = tmpl.name;
+    els.emailTemplateSelect.appendChild(opt);
+  });
+
+  els.emailModal.showModal();
+}
+
+// ─── Contact modal ────────────────────────────────────────────────────────────
+
+function openContactModal(contact = null, fromLead = null) {
+  state.editingContactId = contact ? contact.id : null;
+  els.contactModalTitle.textContent = contact ? 'Edit Contact' : 'New Contact';
+  els.contactFirstName.value = contact ? contact.firstName : (fromLead ? fromLead.firstName : '');
+  els.contactLastName.value = contact ? contact.lastName : (fromLead ? fromLead.lastName : '');
+  els.contactPhone.value = contact ? contact.phone : (fromLead ? fromLead.phone || '' : '');
+  els.contactEmail.value = contact ? contact.email : (fromLead ? fromLead.email || '' : '');
+  els.contactHomeType.value = contact ? contact.homeType : (fromLead ? fromLead.homeType || '' : '');
+  els.contactRoute.value = contact ? contact.route : (fromLead ? fromLead.route || '' : '');
+  els.contactPipelineStatus.value = contact ? contact.pipelineStatus : 'Call Back Scheduled';
+  els.contactSource.value = contact ? (contact.source || 'Other') : (fromLead ? (fromLead.source || 'Other') : 'Other');
+  els.contactNotes.value = contact ? contact.notes : (fromLead ? fromLead.notes || '' : '');
+  els.contactModal._fromLeadId = fromLead ? fromLead.id : null;
+  els.contactModal.showModal();
+}
+
+els.contactCancelBtn.addEventListener('click', () => els.contactModal.close());
+
+els.contactSaveBtn.addEventListener('click', async () => {
+  const firstName = els.contactFirstName.value.trim();
+  const lastName = els.contactLastName.value.trim();
+  if (!firstName || !lastName) { alert('First name and last name are required.'); return; }
+
+  const payload = {
+    firstName,
+    lastName,
+    phone: els.contactPhone.value.trim(),
+    email: els.contactEmail.value.trim(),
+    homeType: els.contactHomeType.value.trim(),
+    route: els.contactRoute.value.trim(),
+    pipelineStatus: els.contactPipelineStatus.value,
+    source: els.contactSource.value,
+    notes: els.contactNotes.value.trim()
+  };
+
+  try {
+    if (state.editingContactId) {
+      await api(`/api/contacts/${state.editingContactId}`, { method: 'PUT', body: JSON.stringify(payload) });
+    } else {
+      if (els.contactModal._fromLeadId) payload.fromLeadId = els.contactModal._fromLeadId;
+      await api('/api/contacts', { method: 'POST', body: JSON.stringify(payload) });
+    }
+    await loadContacts();
+    els.contactModal.close();
+    renderContactsPanel();
+  } catch (err) {
+    alert(err.message);
+  }
+});
+
+// ─── Active Customers panel ───────────────────────────────────────────────────
+
+function renderActiveCustomersPanel() {
+  const filter = state.acFilter;
+  const customers = filter === 'all'
+    ? state.activeCustomers
+    : state.activeCustomers.filter((c) => c.status === filter);
+
+  els.acStatusFilterBar.querySelectorAll('[data-ac-stage]').forEach((tab) => {
+    tab.classList.toggle('active', tab.dataset.acStage === filter);
+  });
+
+  els.activeCustomersList.innerHTML = '';
+
+  if (customers.length === 0) {
+    els.activeCustomersList.innerHTML = '<p class="muted" style="padding:12px">No active customers. Promote a contact to create an active customer.</p>';
+    return;
+  }
+
+  const table = document.createElement('table');
+  table.innerHTML = `
+    <thead>
+      <tr>
+        <th>Customer</th>
+        <th>Status</th>
+        <th>Lender</th>
+        <th>Home Type</th>
+        <th>Route</th>
+        <th>Month</th>
+        <th>Owner</th>
+        <th>Actions</th>
+      </tr>
+    </thead>
+    <tbody></tbody>
+  `;
+
+  const tbody = table.querySelector('tbody');
+  customers.forEach((customer) => {
+    const tr = document.createElement('tr');
+    const checklistCount = customer.checklist ? Object.values(customer.checklist).filter((v) => v === true).length : 0;
+    const checklistTotal = 15;
+    tr.innerHTML = `
+      <td><strong>${escHtml(customer.firstName)} ${escHtml(customer.lastName)}</strong><br><span class="muted" style="font-size:0.8rem">${escHtml(customer.phone || '-')}</span></td>
+      <td><span class="badge badge-blue" style="font-size:0.75rem">${escHtml(customer.status || '-')}</span></td>
+      <td>${customer.lender ? `<span class="badge badge-green">${escHtml(customer.lender)}</span>` : '<span class="muted">-</span>'}</td>
+      <td>${escHtml(customer.homeType || '-')}</td>
+      <td>${escHtml(customer.route || '-')}</td>
+      <td>${escHtml(customer.monthYear || '-')}</td>
+      <td>${escHtml(customer.ownerName || '-')}</td>
+      <td>
+        <button type="button" data-view-ac="${escHtml(customer.id)}" style="font-size:0.75rem;padding:3px 8px">View</button>
+        <span class="muted" style="font-size:0.75rem;margin-left:6px">${checklistCount}/${checklistTotal} ✓</span>
+      </td>
+    `;
+    tbody.appendChild(tr);
+  });
+
+  els.activeCustomersList.appendChild(table);
+
+  els.activeCustomersList.querySelectorAll('[data-view-ac]').forEach((btn) => {
+    btn.addEventListener('click', () => openActiveCustomerDetail(btn.dataset.viewAc));
+  });
+}
+
+function openActiveCustomerDetail(customerId) {
+  const customer = state.activeCustomers.find((c) => c.id === customerId);
+  if (!customer) return;
+  renderActiveCustomerDetailModal(customer);
+  els.acDetailModal.showModal();
+}
+
+function renderActiveCustomerDetailModal(customer) {
+  const isOwner = state.user && customer.owner === state.user.id;
+  const isAdmin = currentUserIsAdmin();
+  const canEdit = isOwner || isAdmin;
+  const cl = customer.checklist || {};
+
+  const checkboxItem = (key, label, isSelect = false, options = []) => {
+    if (isSelect) {
+      const opts = options.map((o) => `<option value="${escHtml(o)}" ${cl[key] === o ? 'selected' : ''}>${escHtml(o)}</option>`).join('');
+      return `
+        <div class="checklist-item">
+          <label>${escHtml(label)}:
+            <select data-cl-key="${escHtml(key)}" ${!canEdit ? 'disabled' : ''}>
+              <option value="">— Select —</option>
+              ${opts}
+            </select>
+          </label>
+        </div>`;
+    }
+    return `
+      <div class="checklist-item">
+        <label class="check-label">
+          <input type="checkbox" data-cl-key="${escHtml(key)}" ${cl[key] ? 'checked' : ''} ${!canEdit ? 'disabled' : ''} />
+          ${escHtml(label)}
+        </label>
+      </div>`;
+  };
+
+  els.acDetailContent.innerHTML = `
+    <div class="toolbar" style="margin-bottom:16px">
+      <div>
+        <h3 style="margin:0">${escHtml(customer.firstName)} ${escHtml(customer.lastName)}</h3>
+        <p class="muted" style="margin:0">Active Customer &nbsp;|&nbsp; Owner: ${escHtml(customer.ownerName || '-')}</p>
+      </div>
+      <div class="toolbar-actions">
+        <button type="button" id="ac-email-btn" class="primary">✉️ Email</button>
+        <button type="button" id="ac-docs-btn">📎 Documents</button>
+        ${isAdmin ? `<button type="button" id="ac-delete-btn" class="danger-btn">🗑️ Delete</button>` : ''}
+        <button type="button" id="ac-close-btn">✕ Close</button>
+      </div>
+    </div>
+
+    <div class="detail-grid" style="margin-bottom:16px">
+      <article class="card">
+        <h4>Contact Info</h4>
+        <p><strong>Phone:</strong> ${escHtml(customer.phone || '-')}</p>
+        <p><strong>Email:</strong> ${escHtml(customer.email || '-')}</p>
+        <p><strong>Home Type:</strong> ${escHtml(customer.homeType || '-')}</p>
+        <p><strong>Route:</strong> ${escHtml(customer.route || '-')}</p>
+        <p><strong>Month:</strong> ${escHtml(customer.monthYear || '-')}</p>
+      </article>
+
+      <article class="card">
+        <h4>Status &amp; Financing</h4>
+        <div style="margin-bottom:10px">
+          <label><strong>Customer Status</strong>
+            <select id="ac-status-select" ${!canEdit ? 'disabled' : ''} style="display:block;margin-top:4px;width:100%">
+              ${ACTIVE_CUSTOMER_STATUSES_LIST.map((s) => `<option value="${escHtml(s)}" ${customer.status === s ? 'selected' : ''}>${escHtml(s)}</option>`).join('')}
+            </select>
+          </label>
+        </div>
+        <div>
+          <label><strong>Approved for Financing — Lender</strong>
+            <select id="ac-lender-select" ${!canEdit ? 'disabled' : ''} style="display:block;margin-top:4px;width:100%">
+              <option value="">— No Lender Selected —</option>
+              ${LENDERS.map((l) => `<option value="${escHtml(l)}" ${customer.lender === l ? 'selected' : ''}>${escHtml(l)}</option>`).join('')}
+            </select>
+          </label>
+        </div>
+        ${canEdit ? `<button type="button" id="ac-save-status-btn" class="primary" style="margin-top:10px;width:100%">Save Status &amp; Lender</button>` : ''}
+      </article>
+    </div>
+
+    <article class="card" style="margin-bottom:16px">
+      <h4>Detailed Items Checklist</h4>
+      <div class="checklist-grid">
+        <div class="checklist-section">
+          <p class="qual-label">Type</p>
+          ${checkboxItem('type', 'Type', true, ['New', 'Used', 'Repo'])}
+          ${checkboxItem('orderStock', 'Order/Stock', true, ['Order', 'Stock'])}
+          ${checkboxItem('factory', 'Factory', true, ['BU', 'RM', 'AT'])}
+          ${checkboxItem('modular', 'Modular', true, ['Y', 'N'])}
+          ${checkboxItem('swDwTw', 'SW/DW/TW', true, ['SW', 'DW', 'TW'])}
+        </div>
+        <div class="checklist-section">
+          <p class="qual-label">Financial Documents</p>
+          ${checkboxItem('payStubs', 'Pay Stubs')}
+          ${checkboxItem('w2s', "W2's")}
+          ${checkboxItem('vod', 'VOD')}
+          ${checkboxItem('voeVor', 'VOE / VOR')}
+          ${checkboxItem('bids', 'Bids')}
+          ${checkboxItem('lenderDoc', 'Lender')}
+        </div>
+        <div class="checklist-section">
+          <p class="qual-label">Property Documents</p>
+          ${checkboxItem('deedLandContract', 'Deed / Land Contract')}
+          ${checkboxItem('siteInspection', 'Site Inspection')}
+          ${checkboxItem('survey', 'Survey')}
+          ${checkboxItem('appraisal', 'Appraisal')}
+          ${checkboxItem('title', 'Title')}
+          ${checkboxItem('address911', '911 Address')}
+          ${checkboxItem('specSheet', 'Spec Sheet')}
+          ${checkboxItem('cocs', 'C.O.C.S.')}
+          ${checkboxItem('conditionsMet', 'Conditions Met')}
+        </div>
+      </div>
+      ${canEdit ? `<button type="button" id="ac-save-checklist-btn" class="primary" style="margin-top:12px">Save Checklist</button>` : ''}
+    </article>
+
+    ${customer.notes ? `<article class="card" style="margin-bottom:16px"><h4>Notes</h4><p>${escHtml(customer.notes).replace(/\n/g, '<br>')}</p></article>` : ''}
+
+    <div id="ac-docs-section" class="hidden" style="margin-top:16px">
+      <div class="toolbar" style="margin-bottom:8px">
+        <h4 style="margin:0">Documents</h4>
+        <button type="button" id="ac-upload-doc-btn" class="primary" style="font-size:0.85rem">+ Upload Document</button>
+      </div>
+      <div id="ac-docs-list"></div>
+    </div>
+  `;
+
+  els.acDetailContent.querySelector('#ac-close-btn').addEventListener('click', () => els.acDetailModal.close());
+
+  const saveStatusBtn = els.acDetailContent.querySelector('#ac-save-status-btn');
+  if (saveStatusBtn) {
+    saveStatusBtn.addEventListener('click', async () => {
+      const status = els.acDetailContent.querySelector('#ac-status-select').value;
+      const lender = els.acDetailContent.querySelector('#ac-lender-select').value;
+      try {
+        await api(`/api/active-customers/${customer.id}`, { method: 'PUT', body: JSON.stringify({ status, lender }) });
+        await loadActiveCustomers();
+        const updated = state.activeCustomers.find((c) => c.id === customer.id);
+        if (updated) renderActiveCustomerDetailModal(updated);
+        renderActiveCustomersPanel();
+        alert('Status and lender saved!');
+      } catch (err) {
+        alert(err.message);
+      }
+    });
+  }
+
+  const saveChecklistBtn = els.acDetailContent.querySelector('#ac-save-checklist-btn');
+  if (saveChecklistBtn) {
+    saveChecklistBtn.addEventListener('click', async () => {
+      const checklist = {};
+      els.acDetailContent.querySelectorAll('input[data-cl-key]').forEach((cb) => {
+        checklist[cb.dataset.clKey] = cb.checked;
+      });
+      els.acDetailContent.querySelectorAll('select[data-cl-key]').forEach((sel) => {
+        checklist[sel.dataset.clKey] = sel.value || null;
+      });
+      try {
+        await api(`/api/active-customers/${customer.id}`, { method: 'PUT', body: JSON.stringify({ checklist }) });
+        await loadActiveCustomers();
+        const updated = state.activeCustomers.find((c) => c.id === customer.id);
+        if (updated) renderActiveCustomerDetailModal(updated);
+        renderActiveCustomersPanel();
+        alert('Checklist saved!');
+      } catch (err) {
+        alert(err.message);
+      }
+    });
+  }
+
+  els.acDetailContent.querySelector('#ac-email-btn').addEventListener('click', () => {
+    state.emailTargetLeadId = customer.id;
+    state.emailTargetType = 'customer';
+    els.emailModalTitle.textContent = `Email — ${customer.firstName} ${customer.lastName}`;
+    els.emailSubject.value = '';
+    els.emailBody.value = '';
+    els.emailTemplateSelect.innerHTML = '<option value="">— Custom / No Template —</option>';
+    state.templates.forEach((tmpl) => {
+      const opt = document.createElement('option');
+      opt.value = tmpl.id;
+      opt.textContent = tmpl.name;
+      els.emailTemplateSelect.appendChild(opt);
+    });
+    els.emailModal.showModal();
+  });
+
+  const deleteBtn = els.acDetailContent.querySelector('#ac-delete-btn');
+  if (deleteBtn) {
+    deleteBtn.addEventListener('click', async () => {
+      if (!window.confirm('Delete this active customer? This cannot be undone.')) return;
+      await api(`/api/active-customers/${customer.id}`, { method: 'DELETE' });
+      await loadActiveCustomers();
+      els.acDetailModal.close();
+      renderActiveCustomersPanel();
+    });
+  }
+
+  els.acDetailContent.querySelector('#ac-docs-btn').addEventListener('click', async () => {
+    const section = els.acDetailContent.querySelector('#ac-docs-section');
+    section.classList.toggle('hidden');
+    if (!section.classList.contains('hidden')) {
+      await renderDocumentsList(customer.id, els.acDetailContent.querySelector('#ac-docs-list'));
+    }
+  });
+
+  const uploadDocBtn = els.acDetailContent.querySelector('#ac-upload-doc-btn');
+  if (uploadDocBtn) {
+    uploadDocBtn.addEventListener('click', () => openDocUploadModal(customer.id, 'customer'));
+  }
+}
+
+// ─── Document management ──────────────────────────────────────────────────────
+
+async function renderDocumentsList(customerId, container) {
+  try {
+    const data = await api(`/api/documents/${customerId}`);
+    const docs = data.documents || [];
+    container.innerHTML = '';
+    if (docs.length === 0) {
+      container.innerHTML = '<p class="muted">No documents uploaded yet.</p>';
+      return;
+    }
+    docs.forEach((doc) => {
+      const row = document.createElement('div');
+      row.className = 'task-row';
+      row.innerHTML = `
+        <div class="task-info" style="flex:1">
+          <strong>${escHtml(doc.fileName)}</strong>
+          <span class="badge badge-blue" style="font-size:0.75rem">${escHtml(doc.docCategory)}</span>
+          <p class="muted" style="font-size:0.8rem">${new Date(doc.uploadedAt).toLocaleDateString()} — ${escHtml(doc.uploadedByName || '-')}</p>
+        </div>
+        <div class="toolbar-actions" style="gap:6px">
+          <a href="/api/documents/${escHtml(customerId)}/${escHtml(doc.id)}/download" target="_blank" style="font-size:0.8rem;padding:4px 10px;border-radius:6px;background:var(--surface);border:1px solid var(--border);color:var(--text);text-decoration:none">⬇️ Download</a>
+          <button type="button" data-del-doc="${escHtml(doc.id)}" class="danger-btn" style="font-size:0.8rem;padding:4px 8px">🗑️</button>
+        </div>
+      `;
+      row.querySelector('[data-del-doc]').addEventListener('click', async () => {
+        if (!window.confirm('Delete this document?')) return;
+        await api(`/api/documents/${customerId}/${doc.id}`, { method: 'DELETE' });
+        await renderDocumentsList(customerId, container);
+      });
+      container.appendChild(row);
+    });
+  } catch (err) {
+    container.innerHTML = `<p class="muted">Failed to load documents: ${escHtml(err.message)}</p>`;
+  }
+}
+
+function openDocUploadModal(customerId, targetType) {
+  state.docUploadTargetId = customerId;
+  state.docUploadTargetType = targetType;
+  els.docCategory.value = 'Pay Stubs';
+  els.docFileInput.value = '';
+  els.docUploadModal.showModal();
+}
+
+els.docUploadCancelBtn.addEventListener('click', () => els.docUploadModal.close());
+
+els.docUploadSaveBtn.addEventListener('click', async () => {
+  const file = els.docFileInput.files[0];
+  if (!file) { alert('Please select a file to upload.'); return; }
+  if (file.size > 10 * 1024 * 1024) { alert('File must be smaller than 10MB.'); return; }
+
+  const reader = new FileReader();
+  reader.onload = async (e) => {
+    const base64Data = e.target.result.split(',')[1];
+    try {
+      await api(`/api/documents/${state.docUploadTargetId}/upload`, {
+        method: 'POST',
+        body: JSON.stringify({
+          fileName: file.name,
+          fileType: file.type,
+          docCategory: els.docCategory.value,
+          data: base64Data
+        })
+      });
+      els.docUploadModal.close();
+
+      let container = null;
+      if (state.docUploadTargetType === 'contact') {
+        container = els.contactDetailContent ? els.contactDetailContent.querySelector('#contact-docs-list') : null;
+      } else {
+        container = els.acDetailContent ? els.acDetailContent.querySelector('#ac-docs-list') : null;
+      }
+      if (container) {
+        await renderDocumentsList(state.docUploadTargetId, container);
+      }
+      alert('Document uploaded successfully!');
+    } catch (err) {
+      alert('Upload failed: ' + err.message);
+    }
+  };
+  reader.readAsDataURL(file);
+});
+
+// ─── Pipeline Report ──────────────────────────────────────────────────────────
+
+async function renderPipelineReport() {
+  try {
+    const data = await api('/api/pipeline/monthly');
+    const months = data.months || [];
+
+    els.pipelineMonthTabs.innerHTML = '';
+    els.pipelineReportContent.innerHTML = '';
+
+    if (months.length === 0) {
+      els.pipelineReportContent.innerHTML = '<p class="muted" style="padding:12px">No active customer data yet. Promote contacts to active customers to see pipeline data here.</p>';
+      return;
+    }
+
+    if (!state.pipelineActiveMonth || !months.find((m) => m.month === state.pipelineActiveMonth)) {
+      state.pipelineActiveMonth = months[0].month;
+    }
+
+    months.forEach((m) => {
+      const tab = document.createElement('span');
+      tab.className = `pipe-tab${m.month === state.pipelineActiveMonth ? ' active' : ''}`;
+      tab.textContent = m.month;
+      tab.addEventListener('click', () => {
+        state.pipelineActiveMonth = m.month;
+        renderPipelineMonthContent(months);
+        els.pipelineMonthTabs.querySelectorAll('.pipe-tab').forEach((t) => t.classList.toggle('active', t.textContent === m.month));
+      });
+      els.pipelineMonthTabs.appendChild(tab);
+    });
+
+    renderPipelineMonthContent(months);
+  } catch (err) {
+    els.pipelineReportContent.innerHTML = `<p class="muted">Failed to load pipeline: ${escHtml(err.message)}</p>`;
+  }
+}
+
+function renderPipelineMonthContent(months) {
+  const monthData = months.find((m) => m.month === state.pipelineActiveMonth);
+  if (!monthData) return;
+
+  const ALL_STATUSES = [
+    'Contact Status', 'App Submitted', 'Approved', 'Pending Conditions', 'Ready to Close',
+    'Appraisal', 'Docs Ordered', 'Closed Pending Delivery', 'Delivered Pending Funding',
+    'Funded', 'Trimout Pending', 'Trimmed Out Pending Addl Work', 'Completed', 'Closed'
+  ];
+
+  els.pipelineReportContent.innerHTML = '';
+
+  const heading = document.createElement('h4');
+  heading.style.margin = '16px 0 8px';
+  heading.textContent = `${monthData.month} — ${monthData.total} Active Customer(s)`;
+  els.pipelineReportContent.appendChild(heading);
+
+  const table = document.createElement('table');
+  table.className = 'pipeline-report-table';
+  table.innerHTML = `
+    <thead>
+      <tr>
+        <th>Status</th>
+        <th>Count</th>
+        <th>% of Total</th>
+      </tr>
+    </thead>
+    <tbody>
+      ${ALL_STATUSES.map((status) => {
+        const count = monthData.statusCounts[status] || 0;
+        const pct = monthData.total > 0 ? Math.round((count / monthData.total) * 100) : 0;
+        return `<tr ${count > 0 ? 'class="pipeline-row-active"' : ''}>
+          <td>${escHtml(status)}</td>
+          <td><strong>${count}</strong></td>
+          <td>
+            <div class="pipeline-bar-wrap">
+              <div class="pipeline-bar-fill" style="width:${pct}%"></div>
+              <span>${pct}%</span>
+            </div>
+          </td>
+        </tr>`;
+      }).join('')}
+    </tbody>
+  `;
+  els.pipelineReportContent.appendChild(table);
+}
+
 els.loginForm.addEventListener('submit', async (event) => {
   event.preventDefault();
   const fd = new FormData(els.loginForm);
@@ -1326,6 +2140,7 @@ els.toggleLoginBtn.addEventListener('click', (e) => { e.preventDefault(); els.re
 
 els.logoutBtn.addEventListener('click', () => {
   state.token = ''; state.user = null; state.leads = []; state.tasks = []; state.templates = [];
+  state.contacts = []; state.activeCustomers = [];
   localStorage.removeItem('crm_token');
   nav('/');
 });
@@ -1364,6 +2179,59 @@ els.usersBtn.addEventListener('click', async () => {
 });
 els.usersCloseBtn.addEventListener('click', () => els.usersPanel.classList.add('hidden'));
 els.addUserBtn.addEventListener('click', () => openUserModal());
+
+els.contactsBtn.addEventListener('click', async () => {
+  await loadContacts();
+  renderContactsPanel();
+  els.contactsPanel.classList.toggle('hidden');
+  els.tasksPanel.classList.add('hidden');
+  els.templatesPanel.classList.add('hidden');
+  els.usersPanel.classList.add('hidden');
+  els.activeCustomersPanel.classList.add('hidden');
+  els.pipelinePanel.classList.add('hidden');
+});
+els.contactsCloseBtn.addEventListener('click', () => els.contactsPanel.classList.add('hidden'));
+els.newContactBtn.addEventListener('click', () => openContactModal());
+
+els.contactsPipelineBar.querySelectorAll('.pipe-tab').forEach((tab) => {
+  tab.addEventListener('click', () => {
+    state.contactsFilter = tab.dataset.stage;
+    renderContactsPanel();
+  });
+});
+
+els.activeCustomersBtn.addEventListener('click', async () => {
+  await loadActiveCustomers();
+  renderActiveCustomersPanel();
+  els.activeCustomersPanel.classList.toggle('hidden');
+  els.tasksPanel.classList.add('hidden');
+  els.templatesPanel.classList.add('hidden');
+  els.usersPanel.classList.add('hidden');
+  els.contactsPanel.classList.add('hidden');
+  els.pipelinePanel.classList.add('hidden');
+});
+els.activeCustomersCloseBtn.addEventListener('click', () => els.activeCustomersPanel.classList.add('hidden'));
+
+els.acStatusFilterBar.querySelectorAll('[data-ac-stage]').forEach((tab) => {
+  tab.addEventListener('click', () => {
+    state.acFilter = tab.dataset.acStage;
+    renderActiveCustomersPanel();
+  });
+});
+
+els.pipelineBtn.addEventListener('click', async () => {
+  els.pipelinePanel.classList.toggle('hidden');
+  els.tasksPanel.classList.add('hidden');
+  els.templatesPanel.classList.add('hidden');
+  els.usersPanel.classList.add('hidden');
+  els.contactsPanel.classList.add('hidden');
+  els.activeCustomersPanel.classList.add('hidden');
+  if (!els.pipelinePanel.classList.contains('hidden')) {
+    await loadActiveCustomers();
+    await renderPipelineReport();
+  }
+});
+els.pipelineCloseBtn.addEventListener('click', () => els.pipelinePanel.classList.add('hidden'));
 
 els.listToggle.addEventListener('click', () => { state.view = 'list'; render(); });
 els.boardToggle.addEventListener('click', () => { state.view = 'board'; render(); });

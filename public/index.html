@@ -59,6 +59,9 @@
             <button id="new-lead-btn" class="primary">+ New Lead</button>
             <button id="tasks-btn">📋 Tasks</button>
             <button id="templates-btn">✉️ Templates</button>
+            <button id="contacts-btn">👥 Contacts</button>
+            <button id="active-customers-btn">⭐ Active Customers</button>
+            <button id="pipeline-btn">📊 Pipeline</button>
             <button id="users-btn" class="hidden">👥 Users</button>
             <button id="export-btn">⬇️ CSV</button>
             <button id="logout-btn">Logout</button>
@@ -98,7 +101,54 @@
           <div id="users-list"></div>
         </section>
 
-        <section id="list-view">
+        <!-- Contacts Panel -->
+        <section id="contacts-panel" class="panel hidden" style="margin-bottom:16px">
+          <div class="toolbar">
+            <h3 style="margin:0">👥 Contacts</h3>
+            <div class="toolbar-actions">
+              <button id="new-contact-btn" class="primary">+ New Contact</button>
+              <button id="contacts-close-btn">✕ Close</button>
+            </div>
+          </div>
+          <div class="contacts-pipeline-bar" id="contacts-pipeline-bar">
+            <span data-stage="all" class="pipe-tab active">All</span>
+            <span data-stage="Call Back Scheduled" class="pipe-tab">Call Back Scheduled</span>
+            <span data-stage="Appointment Set" class="pipe-tab">Appointment Set</span>
+            <span data-stage="Application Sent" class="pipe-tab">Application Sent</span>
+          </div>
+          <div id="contacts-list"></div>
+        </section>
+
+        <!-- Active Customers Panel -->
+        <section id="active-customers-panel" class="panel hidden" style="margin-bottom:16px">
+          <div class="toolbar">
+            <h3 style="margin:0">⭐ Active Customers</h3>
+            <div class="toolbar-actions">
+              <button id="active-customers-close-btn">✕ Close</button>
+            </div>
+          </div>
+          <div class="contacts-pipeline-bar" id="ac-status-filter-bar">
+            <span data-ac-stage="all" class="pipe-tab active">All</span>
+            <span data-ac-stage="App Submitted" class="pipe-tab">App Submitted</span>
+            <span data-ac-stage="Approved" class="pipe-tab">Approved</span>
+            <span data-ac-stage="Pending Conditions" class="pipe-tab">Pending Conditions</span>
+            <span data-ac-stage="Ready to Close" class="pipe-tab">Ready to Close</span>
+            <span data-ac-stage="Funded" class="pipe-tab">Funded</span>
+            <span data-ac-stage="Completed" class="pipe-tab">Completed</span>
+            <span data-ac-stage="Closed" class="pipe-tab">Closed</span>
+          </div>
+          <div id="active-customers-list"></div>
+        </section>
+
+        <!-- Pipeline Report Panel -->
+        <section id="pipeline-panel" class="panel hidden" style="margin-bottom:16px">
+          <div class="toolbar">
+            <h3 style="margin:0">📊 Monthly Pipeline Report</h3>
+            <button id="pipeline-close-btn">✕ Close</button>
+          </div>
+          <div id="pipeline-month-tabs" class="month-tabs"></div>
+          <div id="pipeline-report-content"></div>
+        </section>
           <div class="filters">
             <input id="search-input" placeholder="Search name, route, source…" />
             <select id="status-filter">
@@ -322,6 +372,9 @@
               <option value="appointment">Appointment</option>
               <option value="drip">Drip Campaign</option>
               <option value="custom">Custom</option>
+              <option value="callback">Call Back Reminder</option>
+              <option value="appointment_confirm">Appointment Confirmation</option>
+              <option value="application">Application Sent</option>
             </select>
           </label>
           <label>Subject * <input id="tmpl-subject" type="text" placeholder="Hi {{firstName}}!" required /></label>
@@ -359,6 +412,93 @@
       </div>
     </dialog>
 
+    <!-- Contact Create/Edit Modal -->
+    <dialog id="contact-modal">
+      <div style="min-width:480px;max-width:600px">
+        <h3 id="contact-modal-title">New Contact</h3>
+        <div class="grid" style="gap:10px">
+          <div class="grid two-col" style="gap:10px">
+            <label>First Name * <input id="contact-firstName" type="text" required /></label>
+            <label>Last Name * <input id="contact-lastName" type="text" required /></label>
+            <label>Phone <input id="contact-phone" type="tel" /></label>
+            <label>Email <input id="contact-email" type="email" /></label>
+            <label>Home Type <input id="contact-homeType" type="text" /></label>
+            <label>Route <input id="contact-route" type="text" /></label>
+            <label>Pipeline Status
+              <select id="contact-pipelineStatus">
+                <option>Call Back Scheduled</option>
+                <option>Appointment Set</option>
+                <option>Application Sent</option>
+              </select>
+            </label>
+            <label>Source
+              <select id="contact-source">
+                <option>Facebook</option>
+                <option>TikTok</option>
+                <option>Instagram</option>
+                <option>Referral</option>
+                <option>Google</option>
+                <option>Walk-in</option>
+                <option>Other</option>
+              </select>
+            </label>
+          </div>
+          <label>Notes <textarea id="contact-notes" style="min-height:80px"></textarea></label>
+        </div>
+        <menu>
+          <button type="button" id="contact-cancel-btn">Cancel</button>
+          <button type="button" id="contact-save-btn" class="primary">Save Contact</button>
+        </menu>
+      </div>
+    </dialog>
+
+    <!-- Contact Detail Modal -->
+    <dialog id="contact-detail-modal">
+      <div style="min-width:600px;max-width:800px;max-height:90vh;overflow-y:auto">
+        <div id="contact-detail-content"></div>
+      </div>
+    </dialog>
+
+    <!-- Active Customer Detail Modal -->
+    <dialog id="ac-detail-modal">
+      <div style="min-width:680px;max-width:900px;max-height:90vh;overflow-y:auto">
+        <div id="ac-detail-content"></div>
+      </div>
+    </dialog>
+
+    <!-- Document Upload Modal -->
+    <dialog id="doc-upload-modal">
+      <div style="min-width:480px">
+        <h3>Upload Document</h3>
+        <div class="grid" style="gap:10px">
+          <label>Document Category
+            <select id="doc-category">
+              <option>Pay Stubs</option>
+              <option>W2's</option>
+              <option>VOD</option>
+              <option>VOE/VOR</option>
+              <option>Lender Documents</option>
+              <option>Deed / Land Contract</option>
+              <option>Bids</option>
+              <option>Site Inspection</option>
+              <option>Survey</option>
+              <option>Appraisal</option>
+              <option>Title</option>
+              <option>911 Address</option>
+              <option>Spec Sheet</option>
+              <option>C.O.C.S.</option>
+              <option>Other</option>
+            </select>
+          </label>
+          <label>Select File <input id="doc-file-input" type="file" accept=".pdf,.doc,.docx,.jpg,.jpeg,.png,.gif,.xls,.xlsx" /></label>
+        </div>
+        <div class="hint" style="margin-top:6px">Max file size: 10MB. Accepted: PDF, Word, Excel, Images.</div>
+        <menu>
+          <button type="button" id="doc-upload-cancel-btn">Cancel</button>
+          <button type="button" id="doc-upload-save-btn" class="primary">Upload</button>
+        </menu>
+      </div>
+    </dialog>
     <script src="/app.js"></script>
   </body>
 </html>
