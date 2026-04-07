@@ -4,6 +4,7 @@ const path = require('path');
 const jwt = require('jsonwebtoken');
 const bcrypt = require('bcryptjs');
 const crypto = require('crypto');
+const rateLimit = require('express-rate-limit');
 
 const app = express();
 const PORT = process.env.PORT || 3001;
@@ -53,6 +54,14 @@ if (!fs.existsSync(DOCUMENTS_DIR)) {
 
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
+
+// Global rate limiter
+app.use(rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 200,
+  standardHeaders: true,
+  legacyHeaders: false
+}));
 
 // ─── Default email templates ─────────────────────────────────────────────────
 
@@ -1370,7 +1379,9 @@ app.put('/api/active-customers/:id', (req, res) => {
     return res.status(403).json({ error: 'Only the customer owner can modify this record' });
   }
 
-  const { status, lender, checklist, estimatedValue, notes, homeType, route, monthYear, firstName, lastName, phone, email } = req.body;
+  const { status, lender, checklist, estimatedValue, notes, homeType, route, monthYear, firstName, lastName, phone, email,
+    loanType, modelName, modelFactory, homeName, ordered, specced, estGrossProfit } = req.body;
+  const VALID_LOAN_TYPES = ['Chattel', 'Cash', 'FHA', 'LH'];
   const now = new Date().toISOString();
 
   customers[idx] = {
@@ -1387,6 +1398,13 @@ app.put('/api/active-customers/:id', (req, res) => {
     checklist: checklist && typeof checklist === 'object' ? { ...customer.checklist, ...checklist } : customer.checklist,
     estimatedValue: estimatedValue !== undefined ? Number(estimatedValue) || 0 : customer.estimatedValue,
     monthYear: monthYear || customer.monthYear,
+    loanType: loanType && VALID_LOAN_TYPES.includes(loanType) ? loanType : (loanType === '' ? null : customer.loanType),
+    modelName: modelName !== undefined ? (modelName || '').trim() : customer.modelName,
+    modelFactory: modelFactory !== undefined ? (modelFactory || '').trim() : customer.modelFactory,
+    homeName: homeName !== undefined ? (homeName || '').trim() : customer.homeName,
+    ordered: ordered !== undefined ? Boolean(ordered) : customer.ordered,
+    specced: specced !== undefined ? Boolean(specced) : customer.specced,
+    estGrossProfit: estGrossProfit !== undefined ? Number(estGrossProfit) || 0 : customer.estGrossProfit,
     updatedAt: now
   };
 
@@ -1547,6 +1565,110 @@ app.get('/api/documents/:customerId/:docId/download', (req, res) => {
   res.setHeader('Content-Disposition', `attachment; filename="${doc.fileName}"`);
   res.setHeader('Content-Type', doc.fileType || 'application/octet-stream');
   res.sendFile(filePath);
+});
+
+// ─── Pipeline advanced report (with projected funding dates) ─────────────────
+
+function calcProjectedFundingDate(status) {
+  const FUNDING_OFFSETS = {
+    'App Submitted': 0,
+    'Approved': 7,
+    'Pending Conditions': 14,
+    'Ready to Close': 21,
+    'Appraisal': 14,
+    'Docs Ordered': 10,
+    'Closed Pending Delivery': 30,
+    'Delivered Pending Funding': 5,
+    'Funded': 0,
+    'Trimout Pending': 15,
+    'Trimmed Out Pending Addl Work': 10,
+    'Completed': 7,
+    'Closed': 0
+  };
+  const offset = FUNDING_OFFSETS[status];
+  if (offset === undefined) return null;
+  const d = new Date();
+  d.setDate(d.getDate() + offset);
+  return d.toISOString().slice(0, 10);
+}
+
+function fundingMonthLabel(dateStr) {
+  if (!dateStr) return 'Unknown';
+  // Parse as UTC components to avoid timezone shifting the month
+  const [year, month] = dateStr.split('-').map(Number);
+  const d = new Date(Date.UTC(year, month - 1, 1));
+  return d.toLocaleString('default', { month: 'long', year: 'numeric', timeZone: 'UTC' });
+}
+
+app.get('/api/pipeline/advanced-report', authMiddleware, (req, res) => {
+  const customers = readActiveCustomers();
+  const users = readUsers();
+  const userRecord = Object.values(users).find((u) => u.id === req.user.sub);
+  const isAdmin = isAdminUser(userRecord);
+  const visible = isAdmin ? customers : customers.filter((c) => c.owner === req.user.sub);
+
+  const enriched = visible.map((c) => {
+    const projectedFundingDate = calcProjectedFundingDate(c.status);
+    const fundingMonth = fundingMonthLabel(projectedFundingDate);
+    const cl = c.checklist || {};
+    const checklistSummary = {
+      conditionsCleared: Boolean(cl.conditionsMet),
+      landInspected: Boolean(cl.siteInspection),
+      deliveryInspection: Boolean(cl.survey),
+      closed: Boolean(cl.title),
+      delivered: Boolean(cl.deedLandContract),
+      funded: c.status === 'Funded' || c.status === 'Completed' || c.status === 'Closed',
+      completed: c.status === 'Completed' || c.status === 'Closed',
+      closedFinal: c.status === 'Closed'
+    };
+    const completedCount = Object.values(checklistSummary).filter(Boolean).length;
+    return {
+      id: c.id,
+      firstName: c.firstName,
+      lastName: c.lastName,
+      phone: c.phone,
+      email: c.email,
+      status: c.status,
+      lender: c.lender,
+      loanType: c.loanType || null,
+      modelName: c.modelName || null,
+      modelFactory: c.modelFactory || null,
+      homeName: c.homeName || null,
+      ordered: Boolean(c.ordered),
+      specced: Boolean(c.specced),
+      estGrossProfit: c.estGrossProfit || 0,
+      projectedFundingDate,
+      fundingMonth,
+      checklistSummary,
+      completionPct: Math.round((completedCount / 8) * 100),
+      ownerName: c.ownerName,
+      createdAt: c.createdAt
+    };
+  });
+
+  // Group by funding month
+  const monthOrder = {};
+  enriched.forEach((c) => {
+    if (!monthOrder[c.fundingMonth]) monthOrder[c.fundingMonth] = [];
+    monthOrder[c.fundingMonth].push(c);
+  });
+
+  // Sort months chronologically using the earliest projected funding date in each group
+  const sortedMonths = Object.keys(monthOrder).sort((a, b) => {
+    if (a === 'Unknown') return 1;
+    if (b === 'Unknown') return -1;
+    const dateA = monthOrder[a].map((c) => c.projectedFundingDate).filter(Boolean).sort()[0] || '';
+    const dateB = monthOrder[b].map((c) => c.projectedFundingDate).filter(Boolean).sort()[0] || '';
+    return dateA.localeCompare(dateB);
+  });
+
+  res.json({
+    months: sortedMonths.map((month) => ({
+      month,
+      customers: monthOrder[month],
+      total: monthOrder[month].length
+    }))
+  });
 });
 
 // ─── Pipeline monthly report ──────────────────────────────────────────────────
