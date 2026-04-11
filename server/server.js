@@ -24,8 +24,20 @@ if (NODE_ENV === 'production' && process.env.JWT_SECRET === undefined) {
   console.warn('⚠️  WARNING: Running in production with default JWT_SECRET. Set JWT_SECRET env var.');
 }
 
-const PIPELINE_STAGES = ['New', 'Contacted', 'Qualified', 'Proposal', 'Won', 'Lost'];
-const CONTACT_PIPELINE_STAGES = ['Call Back Scheduled', 'Appointment Set', 'Application Sent'];
+const PIPELINE_STAGES = ['New Lead', 'Hot Lead', 'Appointment Set', 'Active', 'Dead', 'Junk'];
+const CONTACT_PIPELINE_STAGES = [
+  'App Submitted', 'Approve', 'In Process', 'Conditions Cleared', 'Closing Requested',
+  'Closed', 'Pending Delivery', 'Delivered Pending Construction', 'Funded', 'Complete', 'Dead', 'DNQ'
+];
+// Map old lead statuses to new pipeline stages (for migration of existing data)
+const LEAD_STATUS_MIGRATION_MAP = {
+  'New': 'New Lead',
+  'Contacted': 'Hot Lead',
+  'Qualified': 'Hot Lead',
+  'Proposal': 'Appointment Set',
+  'Won': 'Active',
+  'Lost': 'Dead'
+};
 const ACTIVE_CUSTOMER_STATUSES = [
   'Contact Status', 'App Submitted', 'Approved', 'Pending Conditions', 'Ready to Close',
   'Appraisal', 'Docs Ordered', 'Closed Pending Delivery', 'Delivered Pending Funding',
@@ -175,9 +187,27 @@ function readLeads() {
       }
     });
     writeJson(LEADS_FILE, leads);
-    return leads;
+    return migrateLeadStatuses(leads);
   }
-  return Array.isArray(raw) ? raw : [];
+  const leads = Array.isArray(raw) ? raw : [];
+  return migrateLeadStatuses(leads);
+}
+
+// Migrate leads with old pipeline status values to new ones in-memory (and persist if changed)
+function migrateLeadStatuses(leads) {
+  let changed = false;
+  const migrated = leads.map((lead) => {
+    if (lead.status && !PIPELINE_STAGES.includes(lead.status)) {
+      const newStatus = LEAD_STATUS_MIGRATION_MAP[lead.status] || 'New Lead';
+      changed = true;
+      return { ...lead, status: newStatus };
+    }
+    return lead;
+  });
+  if (changed) {
+    writeJson(LEADS_FILE, migrated);
+  }
+  return migrated;
 }
 
 function writeLeads(leads) {
@@ -265,7 +295,7 @@ function isAdminUser(userRecord) {
 
 function sanitizeLeadInput(input) {
   const value = Number(input.estimatedValue || 0);
-  const normalizedStatus = PIPELINE_STAGES.includes(input.status) ? input.status : 'New';
+  const normalizedStatus = PIPELINE_STAGES.includes(input.status) ? input.status : 'New Lead';
 
   const financing = Array.isArray(input.financing)
     ? input.financing.filter((f) => VALID_FINANCING.includes(f))
@@ -757,7 +787,19 @@ app.put('/api/leads/:id', (req, res) => {
   }
 
   writeLeads(leads);
-  res.json({ lead: leads[idx] });
+
+  // Auto-convert to contact when status is set to 'Active'
+  let conversionResult = null;
+  if (patch.status === 'Active' && lead.status !== 'Active') {
+    conversionResult = convertLeadToContact(leads[idx], req.user.sub, readUsers());
+  }
+
+  const responsePayload = { lead: leads[idx] };
+  if (conversionResult) {
+    responsePayload.contact = conversionResult.contact;
+    responsePayload.converted = conversionResult.created;
+  }
+  res.json(responsePayload);
 });
 
 // DELETE /api/leads/:id — only admins can delete leads
@@ -790,7 +832,98 @@ app.delete('/api/leads/:id', (req, res) => {
   res.json({ success: true });
 });
 
-// POST /api/leads/:id/send-email — record an email as sent (backend-ready)
+// ─── Lead → Contact conversion helper ────────────────────────────────────────
+
+/**
+ * Idempotent conversion: if lead was already converted, returns existing contact.
+ * Returns { contact, created: boolean }.
+ */
+function convertLeadToContact(lead, requestingUserId, users) {
+  const contacts = readContacts();
+  const now = new Date().toISOString();
+
+  // Idempotency: if already converted, return existing contact
+  if (lead.convertedToContactId) {
+    const existing = contacts.find((c) => c.id === lead.convertedToContactId);
+    if (existing) return { contact: existing, created: false };
+  }
+
+  // Also check by fromLeadId to handle data inconsistencies
+  const byLeadId = contacts.find((c) => c.fromLeadId === lead.id);
+  if (byLeadId) {
+    // Patch back the lead record if missing convertedToContactId
+    const leads = readLeads();
+    const idx = leads.findIndex((l) => l.id === lead.id);
+    if (idx !== -1 && !leads[idx].convertedToContactId) {
+      leads[idx].convertedToContactId = byLeadId.id;
+      leads[idx].convertedAt = byLeadId.createdAt;
+      writeLeads(leads);
+    }
+    return { contact: byLeadId, created: false };
+  }
+
+  const ownerRecord = Object.values(users).find((u) => u.id === lead.leadOwner);
+
+  const contact = {
+    id: `contact_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
+    firstName: lead.firstName || '',
+    lastName: lead.lastName || '',
+    phone: lead.phone || '',
+    email: lead.email || '',
+    homeType: lead.homeType || '',
+    route: lead.route || '',
+    notes: lead.notes || '',
+    source: lead.source || 'Other',
+    pipelineStatus: 'App Submitted',
+    owner: lead.leadOwner,
+    ownerName: ownerRecord ? ownerRecord.name : (lead.leadOwnerName || ''),
+    fromLeadId: lead.id,
+    leadHistory: lead,
+    emailsSent: [],
+    documents: [],
+    createdAt: now,
+    updatedAt: now
+  };
+
+  contacts.unshift(contact);
+  writeContacts(contacts);
+
+  // Update lead with conversion metadata
+  const leads = readLeads();
+  const idx = leads.findIndex((l) => l.id === lead.id);
+  if (idx !== -1) {
+    leads[idx].convertedToContactId = contact.id;
+    leads[idx].convertedAt = now;
+    writeLeads(leads);
+  }
+
+  return { contact, created: true };
+}
+
+// POST /api/leads/:id/convert-to-contact — explicit conversion endpoint
+app.post('/api/leads/:id/convert-to-contact', authMiddleware, (req, res) => {
+  const leads = readLeads();
+  const lead = leads.find((l) => l.id === req.params.id);
+  if (!lead) return res.status(404).json({ error: 'Lead not found' });
+
+  const users = readUsers();
+  const userRecord = Object.values(users).find((u) => u.id === req.user.sub);
+  const isAdmin = isAdminUser(userRecord);
+
+  // Only lead owner or admin can convert
+  if (lead.leadOwner !== req.user.sub && !isAdmin) {
+    return res.status(403).json({ error: 'Only the lead owner or admin can convert this lead' });
+  }
+
+  const result = convertLeadToContact(lead, req.user.sub, users);
+  res.status(result.created ? 201 : 200).json({
+    contact: result.contact,
+    converted: result.created,
+    message: result.created ? 'Lead converted to contact' : 'Lead was already converted — returning existing contact'
+  });
+});
+
+
 app.post('/api/leads/:id/send-email', authMiddleware, (req, res) => {
   const leads = readLeads();
   const idx = leads.findIndex((l) => l.id === req.params.id);
@@ -1148,13 +1281,20 @@ app.get('/api/contacts/:id', (req, res) => {
   res.json({ contact });
 });
 
-// POST /api/contacts — create from lead or new
+// POST /api/contacts — create from lead conversion (fromLeadId required for non-admins)
 app.post('/api/contacts', (req, res) => {
   const { fromLeadId, firstName, lastName, phone, email, homeType, route, notes, source } = req.body;
   if (!firstName || !lastName) return res.status(400).json({ error: 'firstName and lastName are required' });
 
   const users = readUsers();
   const userRecord = Object.values(users).find((u) => u.id === req.user.sub);
+  const isAdmin = isAdminUser(userRecord);
+
+  // Non-admins must provide fromLeadId (contacts originate from leads only)
+  if (!fromLeadId && !isAdmin) {
+    return res.status(403).json({ error: 'Contacts must be created from a lead. Please convert the lead to a contact instead.' });
+  }
+
   const now = new Date().toISOString();
 
   let leadHistory = null;
@@ -1174,7 +1314,7 @@ app.post('/api/contacts', (req, res) => {
     route: (route || '').trim(),
     notes: (notes || '').trim(),
     source: (source || '').trim() || 'Other',
-    pipelineStatus: 'Call Back Scheduled',
+    pipelineStatus: 'App Submitted',
     owner: req.user.sub,
     ownerName: userRecord ? userRecord.name : req.user.name,
     fromLeadId: fromLeadId || null,

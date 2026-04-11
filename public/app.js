@@ -1,4 +1,4 @@
-const PIPELINE = ['New', 'Contacted', 'Qualified', 'Proposal', 'Won', 'Lost'];
+const PIPELINE = ['New Lead', 'Hot Lead', 'Appointment Set', 'Active', 'Dead', 'Junk'];
 
 const RESPONSE_LABELS = {
   answered: '✓ Answered',
@@ -337,10 +337,33 @@ function createStatusPicker(leadId) {
     const option = document.createElement('button');
     option.type = 'button';
     option.textContent = status;
-    option.addEventListener('click', async () => {
-      await updateLead(leadId, { status });
-      state.openStatusDropdown = null;
-      render();
+    option.addEventListener('click', async (e) => {
+      e.stopPropagation();
+      const lead = state.leads.find((l) => l.id === leadId);
+      try {
+        const result = await api(`/api/leads/${leadId}`, { method: 'PUT', body: JSON.stringify({ status, firstName: lead ? lead.firstName : '', lastName: lead ? lead.lastName : '' }) });
+        const idx = state.leads.findIndex((l) => l.id === leadId);
+        if (idx > -1) state.leads[idx] = result.lead;
+        state.openStatusDropdown = null;
+
+        if (result.converted && result.contact) {
+          await loadContacts();
+          render();
+          if (window.confirm(`✅ Lead converted to Contact!\n\n${result.contact.firstName} ${result.contact.lastName} is now in your Contacts pipeline.\n\nOpen contact now?`)) {
+            openContactDetail(result.contact.id);
+          }
+        } else if (result.contact && status === 'Active') {
+          await loadContacts();
+          render();
+          if (window.confirm(`ℹ️ This lead was already converted to a contact.\n\nOpen contact now?`)) {
+            openContactDetail(result.contact.id);
+          }
+        } else {
+          render();
+        }
+      } catch (err) {
+        alert(err.message);
+      }
     });
     picker.appendChild(option);
   });
@@ -496,7 +519,7 @@ function renderLeadDetail(lead) {
   const isAdmin = currentUserIsAdmin();
   const canEdit = isOwner || isAdmin;
 
-  const pipelineButtons = PIPELINE.filter((s) => s !== 'Lost')
+  const pipelineButtons = PIPELINE
     .map((stage) => `<button type="button" data-stage="${escHtml(stage)}" class="${lead.status === stage ? 'active' : ''}" ${!canEdit ? 'disabled title="Only owner can change stage"' : ''}>${escHtml(stage)}</button>`)
     .join('');
 
@@ -531,7 +554,7 @@ function renderLeadDetail(lead) {
         ${canEdit ? '<button id="edit-btn">✏️ Edit</button>' : ''}
         <button id="send-email-btn" class="primary">✉️ Send Email</button>
         ${canEdit ? '<button id="record-contact-btn">📞 Record Contact</button>' : ''}
-        ${canEdit ? '<button id="move-to-contacts-btn">👥 Move to Contacts</button>' : ''}
+        ${lead.convertedToContactId ? `<button id="view-contact-btn" class="primary" data-contact-id="${escHtml(lead.convertedToContactId)}">👥 View Contact</button>` : ''}
         ${isAdmin ? '<button id="delete-btn" class="danger-btn">🗑️ Delete</button>' : ''}
         ${isAdmin ? `<button id="admin-transfer-btn">🔁 Reassign</button>` : ''}
       </div>
@@ -539,8 +562,8 @@ function renderLeadDetail(lead) {
 
     <div class="pipeline">
       ${pipelineButtons}
-      <button type="button" data-stage="Lost" ${!canEdit ? 'disabled' : ''}>Mark Lost</button>
     </div>
+    ${lead.convertedToContactId ? `<div class="converted-notice" style="margin:8px 0 16px;padding:10px 16px;background:var(--surface);border:1px solid var(--border);border-radius:8px;font-size:0.9rem">✅ Converted to contact. <a href="#" id="converted-contact-link" data-contact-id="${escHtml(lead.convertedToContactId)}">Open contact →</a></div>` : ''}
 
     <div class="detail-grid">
       ${detailCard('Contact Info', `
@@ -593,6 +616,29 @@ function renderLeadDetail(lead) {
     });
   }
 
+  // View-contact button (shown when lead is already converted)
+  const viewContactBtn = els.detailView.querySelector('#view-contact-btn');
+  if (viewContactBtn) {
+    viewContactBtn.addEventListener('click', async () => {
+      await loadContacts();
+      const contact = state.contacts.find((c) => c.id === viewContactBtn.dataset.contactId);
+      if (contact) {
+        openContactDetail(contact.id);
+      }
+    });
+  }
+
+  // Converted-contact inline link
+  const convertedLink = els.detailView.querySelector('#converted-contact-link');
+  if (convertedLink) {
+    convertedLink.addEventListener('click', async (e) => {
+      e.preventDefault();
+      await loadContacts();
+      const contact = state.contacts.find((c) => c.id === convertedLink.dataset.contactId);
+      if (contact) openContactDetail(contact.id);
+    });
+  }
+
   if (isAdmin) {
     els.detailView.querySelector('#delete-btn').addEventListener('click', async () => {
       if (!window.confirm('Delete this lead? This cannot be undone.')) return;
@@ -603,16 +649,6 @@ function renderLeadDetail(lead) {
   }
 
   els.detailView.querySelector('#send-email-btn').addEventListener('click', () => openEmailModal(lead));
-
-  if (canEdit) {
-    const moveToContactsBtn = els.detailView.querySelector('#move-to-contacts-btn');
-    if (moveToContactsBtn) {
-      moveToContactsBtn.addEventListener('click', () => {
-        nav('/');
-        openContactModal(null, lead);
-      });
-    }
-  }
 
   if (isAdmin) {
     els.detailView.querySelector('#admin-transfer-btn').addEventListener('click', async () => {
@@ -636,9 +672,33 @@ function renderLeadDetail(lead) {
     if (btn.disabled) return;
     btn.addEventListener('click', async () => {
       const stage = btn.getAttribute('data-stage');
-      await updateLead(lead.id, { status: stage, firstName: lead.firstName, lastName: lead.lastName });
-      const updated = state.leads.find((item) => item.id === lead.id);
-      if (updated) renderLeadDetail(updated);
+      try {
+        const result = await api(`/api/leads/${lead.id}`, { method: 'PUT', body: JSON.stringify({ status: stage, firstName: lead.firstName, lastName: lead.lastName }) });
+        // Update local state
+        const idx = state.leads.findIndex((item) => item.id === lead.id);
+        if (idx > -1) state.leads[idx] = result.lead;
+
+        // If conversion happened, show success and open contacts panel
+        if (result.converted && result.contact) {
+          await loadContacts();
+          renderLeadDetail(result.lead);
+          if (window.confirm(`✅ Lead converted to Contact!\n\n${result.contact.firstName} ${result.contact.lastName} is now in your Contacts pipeline.\n\nOpen contact now?`)) {
+            openContactDetail(result.contact.id);
+          }
+        } else if (result.contact && stage === 'Active') {
+          // Already converted — inform user
+          await loadContacts();
+          renderLeadDetail(result.lead);
+          if (window.confirm(`ℹ️ This lead was already converted to a contact.\n\nOpen contact now?`)) {
+            openContactDetail(result.contact.id);
+          }
+        } else {
+          const updated = state.leads.find((item) => item.id === lead.id);
+          if (updated) renderLeadDetail(updated);
+        }
+      } catch (err) {
+        alert(err.message);
+      }
     });
   });
 }
@@ -687,6 +747,8 @@ function render() {
     : '';
   // Show admin-only buttons
   if (els.usersBtn) els.usersBtn.classList.toggle('hidden', !isAdmin);
+  // Hide "New Contact" button from non-admins (contacts must originate from leads)
+  if (els.newContactBtn) els.newContactBtn.classList.toggle('hidden', !isAdmin);
   if (isDetailRoute()) renderDetailPage();
   else renderListPage();
 }
@@ -1010,7 +1072,7 @@ function collectLeadFormData() {
     route: String(fd.get('route') || ''),
     estimatedValue: Number(fd.get('estimatedValue') || 0),
     source: String(fd.get('source') || ''),
-    status: String(fd.get('status') || 'New'),
+    status: String(fd.get('status') || 'New Lead'),
     moveDate: String(fd.get('moveDate') || ''),
     transportDetails: String(fd.get('transportDetails') || ''),
     notes: String(fd.get('notes') || ''),
@@ -1365,7 +1427,7 @@ async function initializeAuthedState() {
   try {
     const me = await api('/api/auth/me');
     state.user = me.user;
-    const loaders = [loadLeads(), loadTemplates(), loadTasks()];
+    const loaders = [loadLeads(), loadTemplates(), loadTasks(), loadContacts(), loadActiveCustomers()];
     if (currentUserIsAdmin()) loaders.push(loadUsers());
     await Promise.all(loaders);
     render();
@@ -1393,7 +1455,10 @@ async function loadActiveCustomers() {
 
 // ─── Contacts panel ───────────────────────────────────────────────────────────
 
-const CONTACT_PIPELINE = ['Call Back Scheduled', 'Appointment Set', 'Application Sent'];
+const CONTACT_PIPELINE = [
+  'App Submitted', 'Approve', 'In Process', 'Conditions Cleared', 'Closing Requested',
+  'Closed', 'Pending Delivery', 'Delivered Pending Construction', 'Funded', 'Complete', 'Dead', 'DNQ'
+];
 
 const ACTIVE_CUSTOMER_STATUSES_LIST = [
   'Contact Status', 'App Submitted', 'Approved', 'Pending Conditions', 'Ready to Close',
@@ -1416,7 +1481,7 @@ function renderContactsPanel() {
   els.contactsList.innerHTML = '';
 
   if (contacts.length === 0) {
-    els.contactsList.innerHTML = '<p class="muted" style="padding:12px">No contacts found. Move a lead to contacts or create a new contact.</p>';
+    els.contactsList.innerHTML = '<p class="muted" style="padding:12px">No contacts found. Set a lead\'s status to <strong>Active</strong> to automatically convert it to a contact.</p>';
     return;
   }
 
@@ -1478,6 +1543,11 @@ async function promoteContactToCustomer(contactId) {
 function openContactDetail(contactId) {
   const contact = state.contacts.find((c) => c.id === contactId);
   if (!contact) return;
+  // Make the contacts panel visible if needed
+  if (els.contactsPanel.classList.contains('hidden')) {
+    els.contactsPanel.classList.remove('hidden');
+    renderContactsPanel();
+  }
   renderContactDetailModal(contact);
   els.contactDetailModal.showModal();
 }
@@ -1627,7 +1697,7 @@ function openContactModal(contact = null, fromLead = null) {
   els.contactEmail.value = contact ? contact.email : (fromLead ? fromLead.email || '' : '');
   els.contactHomeType.value = contact ? contact.homeType : (fromLead ? fromLead.homeType || '' : '');
   els.contactRoute.value = contact ? contact.route : (fromLead ? fromLead.route || '' : '');
-  els.contactPipelineStatus.value = contact ? contact.pipelineStatus : 'Call Back Scheduled';
+  els.contactPipelineStatus.value = contact ? contact.pipelineStatus : 'App Submitted';
   els.contactSource.value = contact ? (contact.source || 'Other') : (fromLead ? (fromLead.source || 'Other') : 'Other');
   els.contactNotes.value = contact ? contact.notes : (fromLead ? fromLead.notes || '' : '');
   els.contactModal._fromLeadId = fromLead ? fromLead.id : null;
@@ -2282,7 +2352,7 @@ els.loginForm.addEventListener('submit', async (event) => {
     state.token = result.token;
     state.user = result.user;
     localStorage.setItem('crm_token', state.token);
-    const loaders = [loadLeads(), loadTemplates(), loadTasks()];
+    const loaders = [loadLeads(), loadTemplates(), loadTasks(), loadContacts(), loadActiveCustomers()];
     if (currentUserIsAdmin()) loaders.push(loadUsers());
     await Promise.all(loaders);
     nav('/');
@@ -2297,7 +2367,7 @@ els.registerForm.addEventListener('submit', async (event) => {
     state.token = result.token;
     state.user = result.user;
     localStorage.setItem('crm_token', state.token);
-    const loaders = [loadLeads(), loadTemplates(), loadTasks()];
+    const loaders = [loadLeads(), loadTemplates(), loadTasks(), loadContacts(), loadActiveCustomers()];
     if (currentUserIsAdmin()) loaders.push(loadUsers());
     await Promise.all(loaders);
     nav('/');
