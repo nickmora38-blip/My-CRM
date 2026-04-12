@@ -70,7 +70,7 @@ export default function LeadsPage() {
     const fetchLeads = async () => {
       try {
         const res = await leadsAPI.getAll();
-        dispatch(setLeads(res.data));
+        dispatch(setLeads(res.data.leads));
       } catch {
         if (leads.length === 0) dispatch(setLeads(DEMO_LEADS));
       }
