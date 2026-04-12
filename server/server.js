@@ -6,6 +6,8 @@ const bcrypt = require('bcryptjs');
 const crypto = require('crypto');
 const rateLimit = require('express-rate-limit');
 const nodemailer = require('nodemailer');
+const webpush = require('web-push');
+const twilio = require('twilio');
 
 // ─── Email transport (optional – configure via env vars) ──────────────────────
 // Set SMTP_HOST, SMTP_PORT, SMTP_USER, SMTP_PASS to enable real email delivery.
@@ -38,6 +40,22 @@ const app = express();
 const PORT = process.env.PORT || 3001;
 const NODE_ENV = process.env.NODE_ENV || 'development';
 const JWT_SECRET = process.env.JWT_SECRET || 'dev-only-secret-change-in-production';
+
+// VAPID Web Push configuration
+const VAPID_PUBLIC_KEY = process.env.VAPID_PUBLIC_KEY || '';
+const VAPID_PRIVATE_KEY = process.env.VAPID_PRIVATE_KEY || '';
+const VAPID_SUBJECT = process.env.VAPID_SUBJECT || 'mailto:admin@example.com';
+const PUSH_CONFIGURED = !!(VAPID_PUBLIC_KEY && VAPID_PRIVATE_KEY);
+if (PUSH_CONFIGURED) {
+  webpush.setVapidDetails(VAPID_SUBJECT, VAPID_PUBLIC_KEY, VAPID_PRIVATE_KEY);
+}
+
+// Twilio SMS configuration
+const TWILIO_ACCOUNT_SID = process.env.TWILIO_ACCOUNT_SID || '';
+const TWILIO_AUTH_TOKEN = process.env.TWILIO_AUTH_TOKEN || '';
+const TWILIO_FROM_NUMBER = process.env.TWILIO_FROM_NUMBER || '';
+const SMS_CONFIGURED = !!(TWILIO_ACCOUNT_SID && TWILIO_AUTH_TOKEN && TWILIO_FROM_NUMBER);
+const twilioClient = SMS_CONFIGURED ? twilio(TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN) : null;
 const DATA_DIR = process.env.DATA_DIR_OVERRIDE || path.join(__dirname, 'data');
 const LEADS_FILE = path.join(DATA_DIR, 'leads.json');
 const USERS_FILE = path.join(DATA_DIR, 'users.json');
@@ -50,6 +68,7 @@ const DEALER_APPS_FILE = path.join(DATA_DIR, 'dealerApplications.json');
 const CLOSING_DOCS_FILE = path.join(DATA_DIR, 'closingDocs.json');
 const SETTINGS_FILE = path.join(DATA_DIR, 'settings.json');
 const DOCUMENTS_DIR = path.join(DATA_DIR, 'documents');
+const PUSH_SUBSCRIPTIONS_FILE = path.join(DATA_DIR, 'pushSubscriptions.json');
 
 // Warn if running in production with default secret
 if (NODE_ENV === 'production' && process.env.JWT_SECRET === undefined) {
@@ -292,6 +311,13 @@ function readTasks() {
 
 function writeTasks(tasks) {
   writeJson(TASKS_FILE, tasks);
+}
+
+function readPushSubscriptions() {
+  return readJson(PUSH_SUBSCRIPTIONS_FILE, {});
+}
+function writePushSubscriptions(data) {
+  writeJson(PUSH_SUBSCRIPTIONS_FILE, data);
 }
 
 function readContacts() {
@@ -648,6 +674,98 @@ function generateMonthlyCallTask(leadId, leadOwner) {
   };
 }
 
+// ─── Notification helpers ──────────────────────────────────────────────────────
+
+async function sendPushNotification(userId, payload) {
+  if (!PUSH_CONFIGURED) return;
+  const subs = readPushSubscriptions();
+  const userSubs = subs[userId] || [];
+  const stale = [];
+  await Promise.all(
+    userSubs.map(async (sub) => {
+      try {
+        await webpush.sendNotification(sub, JSON.stringify(payload));
+      } catch (err) {
+        if (err.statusCode === 410 || err.statusCode === 404) {
+          stale.push(sub.endpoint);
+        }
+      }
+    })
+  );
+  if (stale.length > 0) {
+    subs[userId] = userSubs.filter((s) => !stale.includes(s.endpoint));
+    writePushSubscriptions(subs);
+  }
+}
+
+async function sendSMS(phoneNumber, message) {
+  if (!SMS_CONFIGURED || !phoneNumber) return;
+  try {
+    await twilioClient.messages.create({
+      body: message,
+      from: TWILIO_FROM_NUMBER,
+      to: phoneNumber
+    });
+  } catch (err) {
+    console.error('[SMS] Failed to send:', err.message);
+  }
+}
+
+async function notifyTaskDueSoon(task) {
+  const users = readUsers();
+  const assignedUserId = task.assignedTo || task.leadOwner;
+  if (!assignedUserId) return;
+
+  const user = Object.values(users).find((u) => u.id === assignedUserId);
+  if (!user) return;
+
+  const title = task.title || 'Task due soon';
+  const body = `Due in ~5 minutes: ${title}`;
+
+  const pushPayload = {
+    type: 'task_due_soon',
+    title: '⏰ Task Due Soon',
+    body,
+    taskId: task.id,
+    url: '/'
+  };
+
+  await Promise.all([
+    sendPushNotification(assignedUserId, pushPayload),
+    user.smsOptIn && user.phoneNumber
+      ? sendSMS(user.phoneNumber, `[CRM] ${body}`)
+      : Promise.resolve()
+  ]);
+}
+
+async function notifyTaskAssigned(task) {
+  const users = readUsers();
+  const assignedUserId = task.assignedTo || task.leadOwner;
+  if (!assignedUserId) return;
+
+  const user = Object.values(users).find((u) => u.id === assignedUserId);
+  if (!user) return;
+
+  const title = task.title || 'New task';
+  const body = `New task assigned: ${title}`;
+  const dueStr = task.scheduledAt ? ` (due ${new Date(task.scheduledAt).toLocaleString()})` : '';
+
+  const pushPayload = {
+    type: 'task_assigned',
+    title: '📋 Task Assigned',
+    body: `${body}${dueStr}`,
+    taskId: task.id,
+    url: '/tasks'
+  };
+
+  await Promise.all([
+    sendPushNotification(assignedUserId, pushPayload),
+    user.smsOptIn && user.phoneNumber
+      ? sendSMS(user.phoneNumber, `[CRM] ${body}${dueStr}`)
+      : Promise.resolve()
+  ]);
+}
+
 // ─── Background scheduler ─────────────────────────────────────────────────────
 
 function runScheduler() {
@@ -660,6 +778,19 @@ function runScheduler() {
   tasks.forEach((task) => {
     if (task.completed) return;
     const scheduledAt = new Date(task.scheduledAt);
+
+    // 5-min-prior notification (send once, deduplicate via dueSoonNotifiedAt)
+    if (!task.dueSoonNotifiedAt && scheduledAt > now) {
+      const minsUntilDue = (scheduledAt - now) / 60_000;
+      if (minsUntilDue <= 5 && minsUntilDue > 0) {
+        task.dueSoonNotifiedAt = now.toISOString();
+        tasksChanged = true;
+        notifyTaskDueSoon(task).catch((err) =>
+          console.error('[NOTIFY] Due-soon notification failed:', err)
+        );
+      }
+    }
+
     if (scheduledAt > now) return;
 
     if (task.type === 'mark_dead') {
@@ -1198,22 +1329,72 @@ app.get('/api/tasks', (req, res) => {
   const leads = readLeads();
   const users = readUsers();
   const userRecord = Object.values(users).find((u) => u.id === req.user.sub);
-  const isAdmin = userRecord && userRecord.isAdmin;
+  const isAdmin = isAdminUser(userRecord);
 
-  // Admins see all tasks; regular users see:
-  //   - tasks for leads they own, AND
-  //   - review_application tasks assigned directly to them (leadOwner matches)
+  // Admins see all tasks; regular users see tasks assigned to them or owned by them
   const ownedLeadIds = new Set(leads.filter((l) => l.leadOwner === req.user.sub).map((l) => l.id));
-  const filtered = isAdmin
+  let filtered = isAdmin
     ? tasks
-    : tasks.filter((t) => ownedLeadIds.has(t.leadId) || t.leadOwner === req.user.sub);
+    : tasks.filter(
+        (t) =>
+          t.assignedTo === req.user.sub ||
+          (!t.assignedTo && t.leadOwner === req.user.sub) ||
+          ownedLeadIds.has(t.leadId)
+      );
 
   const { completed, leadId } = req.query;
-  let result = filtered;
-  if (completed !== undefined) result = result.filter((t) => t.completed === (completed === 'true'));
-  if (leadId) result = result.filter((t) => t.leadId === leadId);
+  if (completed !== undefined) filtered = filtered.filter((t) => t.completed === (completed === 'true'));
+  if (leadId) filtered = filtered.filter((t) => t.leadId === leadId);
 
-  res.json({ tasks: result.sort((a, b) => String(a.scheduledAt).localeCompare(String(b.scheduledAt))) });
+  res.json({ tasks: filtered.sort((a, b) => String(a.scheduledAt).localeCompare(String(b.scheduledAt))) });
+});
+
+app.post('/api/tasks', (req, res) => {
+  const { title, scheduledAt, assignedTo, notes, leadId } = req.body;
+  if (!title || !scheduledAt) {
+    return res.status(400).json({ error: 'title and scheduledAt are required' });
+  }
+
+  const users = readUsers();
+  const userRecord = Object.values(users).find((u) => u.id === req.user.sub);
+  const isAdmin = isAdminUser(userRecord);
+
+  let resolvedAssignedTo = req.user.sub;
+  if (assignedTo) {
+    const assignee = Object.values(users).find((u) => u.id === assignedTo);
+    if (!assignee) return res.status(400).json({ error: 'Assigned user not found' });
+    if (!isAdmin && assignedTo !== req.user.sub) {
+      return res.status(403).json({ error: 'Only admins can assign tasks to other users' });
+    }
+    resolvedAssignedTo = assignedTo;
+  }
+
+  const now = new Date().toISOString();
+  const task = {
+    id: `task_${crypto.randomUUID()}`,
+    title: String(title).slice(0, 200),
+    scheduledAt: new Date(scheduledAt).toISOString(),
+    notes: notes ? String(notes).slice(0, 1000) : '',
+    type: 'custom',
+    leadId: leadId || null,
+    leadOwner: req.user.sub,
+    assignedTo: resolvedAssignedTo,
+    completed: false,
+    completedAt: null,
+    dueSoonNotifiedAt: null,
+    assignedNotifiedAt: null,
+    createdAt: now
+  };
+
+  const tasks = readTasks();
+  tasks.push(task);
+  writeTasks(tasks);
+
+  notifyTaskAssigned(task).catch((err) =>
+    console.error('[NOTIFY] Task assignment notification failed:', err)
+  );
+
+  res.status(201).json({ task });
 });
 
 app.put('/api/tasks/:id/complete', (req, res) => {
@@ -1221,8 +1402,24 @@ app.put('/api/tasks/:id/complete', (req, res) => {
   const idx = tasks.findIndex((t) => t.id === req.params.id);
   if (idx === -1) return res.status(404).json({ error: 'Task not found' });
 
-  tasks[idx].completed = true;
-  tasks[idx].completedAt = new Date().toISOString();
+  const users = readUsers();
+  const userRecord = Object.values(users).find((u) => u.id === req.user.sub);
+  const isAdmin = isAdminUser(userRecord);
+  const task = tasks[idx];
+
+  if (
+    !isAdmin &&
+    task.assignedTo !== req.user.sub &&
+    task.leadOwner !== req.user.sub
+  ) {
+    return res.status(403).json({ error: 'Not authorized to complete this task' });
+  }
+
+  tasks[idx] = {
+    ...task,
+    completed: true,
+    completedAt: new Date().toISOString()
+  };
   writeTasks(tasks);
   res.json({ task: tasks[idx] });
 });
@@ -2177,6 +2374,71 @@ app.put('/api/settings', authMiddleware, adminMiddleware, (req, res) => {
   if (req.body.calcUrl !== undefined) updated.calcUrl = String(req.body.calcUrl || '').trim();
   writeSettings(updated);
   res.json({ settings: updated });
+});
+
+// ─── Push Notification Routes ──────────────────────────────────────────────────
+
+app.get('/api/push/vapid-public-key', (req, res) => {
+  res.json({ publicKey: VAPID_PUBLIC_KEY || null });
+});
+
+app.post('/api/push/subscribe', authMiddleware, (req, res) => {
+  const { subscription } = req.body;
+  if (!subscription || !subscription.endpoint) {
+    return res.status(400).json({ error: 'subscription object with endpoint required' });
+  }
+  const subs = readPushSubscriptions();
+  const userId = req.user.sub;
+  if (!subs[userId]) subs[userId] = [];
+  const exists = subs[userId].some((s) => s.endpoint === subscription.endpoint);
+  if (!exists) {
+    subs[userId].push(subscription);
+    writePushSubscriptions(subs);
+  }
+  res.json({ success: true });
+});
+
+app.delete('/api/push/unsubscribe', authMiddleware, (req, res) => {
+  const { endpoint } = req.body;
+  const subs = readPushSubscriptions();
+  const userId = req.user.sub;
+  if (subs[userId]) {
+    subs[userId] = subs[userId].filter((s) => s.endpoint !== endpoint);
+    writePushSubscriptions(subs);
+  }
+  res.json({ success: true });
+});
+
+// ─── User profile routes ───────────────────────────────────────────────────────
+
+app.get('/api/users/me', authMiddleware, (req, res) => {
+  const users = readUsers();
+  const userRecord = Object.values(users).find((u) => u.id === req.user.sub);
+  if (!userRecord) return res.status(404).json({ error: 'User not found' });
+  const { passwordHash: _h, ...safeUser } = userRecord;
+  res.json({ user: safeUser });
+});
+
+app.put('/api/users/me', authMiddleware, (req, res) => {
+  const users = readUsers();
+  const userRecord = Object.values(users).find((u) => u.id === req.user.sub);
+  if (!userRecord) return res.status(404).json({ error: 'User not found' });
+
+  const { phoneNumber, smsOptIn, name } = req.body;
+  if (phoneNumber !== undefined) {
+    const cleaned = String(phoneNumber).replace(/[^\d+]/g, '');
+    userRecord.phoneNumber = cleaned || null;
+  }
+  if (smsOptIn !== undefined) userRecord.smsOptIn = Boolean(smsOptIn);
+  if (name !== undefined && typeof name === 'string' && name.trim()) {
+    userRecord.name = name.trim();
+  }
+
+  users[userRecord.email] = userRecord;
+  writeUsers(users);
+
+  const { passwordHash: _h, ...safeUser } = userRecord;
+  res.json({ user: safeUser });
 });
 
 // ─── Health check ─────────────────────────────────────────────────────────────

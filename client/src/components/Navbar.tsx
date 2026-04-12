@@ -13,6 +13,8 @@ import ExclusiveLogo from './ExclusiveLogo';
 const navLinks = [
   { path: '/', label: 'Dashboard' },
   { path: '/leads', label: 'Leads' },
+  { path: '/tasks', label: 'Tasks' },
+  { path: '/profile', label: 'Profile' },
 ];
 
 export default function Navbar() {

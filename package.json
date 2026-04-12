@@ -10,14 +10,19 @@
   },
   "jest": {
     "testEnvironment": "node",
-    "testMatch": ["**/__tests__/**/*.test.js", "**/*.test.js"]
+    "testMatch": [
+      "**/__tests__/**/*.test.js",
+      "**/*.test.js"
+    ]
   },
   "dependencies": {
     "bcryptjs": "^2.4.3",
     "express": "^4.21.2",
     "express-rate-limit": "^8.3.2",
     "jsonwebtoken": "^9.0.2",
-    "nodemailer": "^7.0.11"
+    "nodemailer": "^7.0.11",
+    "twilio": "^5.13.1",
+    "web-push": "^3.6.7"
   },
   "devDependencies": {
     "jest": "^30.3.0",
