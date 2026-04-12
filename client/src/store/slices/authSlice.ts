@@ -6,9 +6,17 @@ interface AuthState {
   error: string | null;
 }
 
+const storedUser = localStorage.getItem('crm_user');
+let parsedUser: AuthState['user'] = null;
+try {
+  parsedUser = storedUser ? JSON.parse(storedUser) : null;
+} catch {
+  parsedUser = null;
+}
+
 const initialState: AuthState = {
   token: localStorage.getItem('crm_token'),
-  user: null,
+  user: parsedUser,
   error: null,
 };
 
@@ -21,6 +29,7 @@ const authSlice = createSlice({
       state.user = action.payload.user;
       state.error = null;
       localStorage.setItem('crm_token', action.payload.token);
+      localStorage.setItem('crm_user', JSON.stringify(action.payload.user));
     },
     setError(state, action: PayloadAction<string>) {
       state.error = action.payload;
@@ -30,6 +39,7 @@ const authSlice = createSlice({
       state.user = null;
       state.error = null;
       localStorage.removeItem('crm_token');
+      localStorage.removeItem('crm_user');
     },
   },
 });
