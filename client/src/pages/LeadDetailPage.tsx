@@ -118,7 +118,7 @@ export default function LeadDetailPage() {
   const labelClass = 'block text-xs font-medium text-gray-400 mb-1';
 
   return (
-    <div className="min-h-screen bg-black">
+    <div className="min-h-screen bg-black pb-20 sm:pb-0">
       <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         {/* Back + Actions */}
         <div className="flex items-center justify-between mb-6 gap-3">

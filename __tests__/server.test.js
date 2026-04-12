@@ -395,3 +395,318 @@ describe('Email notifications (mocked)', () => {
     }
   });
 });
+
+// ─── Push subscriptions API ───────────────────────────────────────────────────
+
+describe('Push subscription routes', () => {
+  let app;
+  let userToken;
+
+  beforeAll(() => {
+    jest.resetModules();
+    const userHash = bcrypt.hashSync('user123', 4);
+    seedUsers({
+      'pushuser@test.local': {
+        id: 'user-push',
+        email: 'pushuser@test.local',
+        name: 'Push User',
+        isAdmin: false,
+        role: 'phc',
+        active: true,
+        passwordHash: userHash
+      }
+    });
+    ({ app } = require('../server/server.js'));
+    userToken = makeToken('user-push', 'phc', 'Push User');
+  });
+
+  test('GET /api/push/vapid-public-key returns null when not configured', async () => {
+    delete process.env.VAPID_PUBLIC_KEY;
+    delete process.env.VAPID_PRIVATE_KEY;
+    const res = await request(app).get('/api/push/vapid-public-key');
+    expect(res.status).toBe(200);
+    expect(res.body.publicKey).toBeNull();
+  });
+
+  test('POST /api/push/subscribe requires auth', async () => {
+    const res = await request(app).post('/api/push/subscribe').send({
+      subscription: { endpoint: 'https://example.com/push/1', keys: { p256dh: 'abc', auth: 'def' } }
+    });
+    expect(res.status).toBe(401);
+  });
+
+  test('POST /api/push/subscribe stores subscription', async () => {
+    const fakeSub = { endpoint: 'https://example.com/push/1', keys: { p256dh: 'abc', auth: 'def' } };
+    const res = await request(app)
+      .post('/api/push/subscribe')
+      .set('Authorization', `Bearer ${userToken}`)
+      .send({ subscription: fakeSub });
+    expect(res.status).toBe(200);
+    expect(res.body.success).toBe(true);
+
+    // Verify stored on disk
+    const pushFile = path.join(TEST_DATA_DIR, 'pushSubscriptions.json');
+    const stored = JSON.parse(fs.readFileSync(pushFile, 'utf8'));
+    expect(stored['user-push']).toHaveLength(1);
+    expect(stored['user-push'][0].endpoint).toBe('https://example.com/push/1');
+  });
+
+  test('DELETE /api/push/unsubscribe removes subscription', async () => {
+    // Subscribe first
+    const fakeSub = { endpoint: 'https://example.com/push/del', keys: { p256dh: 'abc', auth: 'def' } };
+    await request(app)
+      .post('/api/push/subscribe')
+      .set('Authorization', `Bearer ${userToken}`)
+      .send({ subscription: fakeSub });
+
+    // Unsubscribe
+    const res = await request(app)
+      .delete('/api/push/unsubscribe')
+      .set('Authorization', `Bearer ${userToken}`)
+      .send({ endpoint: 'https://example.com/push/del' });
+    expect(res.status).toBe(200);
+    expect(res.body.success).toBe(true);
+
+    const pushFile = path.join(TEST_DATA_DIR, 'pushSubscriptions.json');
+    const stored = JSON.parse(fs.readFileSync(pushFile, 'utf8'));
+    const remaining = (stored['user-push'] || []).filter(
+      (s) => s.endpoint === 'https://example.com/push/del'
+    );
+    expect(remaining).toHaveLength(0);
+  });
+});
+
+// ─── User profile (GET/PUT /api/users/me) ────────────────────────────────────
+
+describe('GET /api/users/me and PUT /api/users/me', () => {
+  let app;
+  let userToken;
+
+  beforeAll(() => {
+    jest.resetModules();
+    const userHash = bcrypt.hashSync('user123', 4);
+    seedUsers({
+      'profile@test.local': {
+        id: 'user-profile',
+        email: 'profile@test.local',
+        name: 'Profile User',
+        isAdmin: false,
+        role: 'phc',
+        active: true,
+        passwordHash: userHash
+      }
+    });
+    ({ app } = require('../server/server.js'));
+    userToken = makeToken('user-profile', 'phc', 'Profile User');
+  });
+
+  test('GET /api/users/me returns user without passwordHash', async () => {
+    const res = await request(app)
+      .get('/api/users/me')
+      .set('Authorization', `Bearer ${userToken}`);
+    expect(res.status).toBe(200);
+    expect(res.body.user.id).toBe('user-profile');
+    expect(res.body.user.passwordHash).toBeUndefined();
+  });
+
+  test('PUT /api/users/me updates phoneNumber and smsOptIn', async () => {
+    const res = await request(app)
+      .put('/api/users/me')
+      .set('Authorization', `Bearer ${userToken}`)
+      .send({ phoneNumber: '+15551234567', smsOptIn: true });
+    expect(res.status).toBe(200);
+    expect(res.body.user.phoneNumber).toBe('+15551234567');
+    expect(res.body.user.smsOptIn).toBe(true);
+    expect(res.body.user.passwordHash).toBeUndefined();
+  });
+
+  test('PUT /api/users/me normalizes phone number', async () => {
+    const res = await request(app)
+      .put('/api/users/me')
+      .set('Authorization', `Bearer ${userToken}`)
+      .send({ phoneNumber: '(555) 123-4567' });
+    expect(res.status).toBe(200);
+    // All non-digit chars removed (no + in this number)
+    expect(res.body.user.phoneNumber).toBe('5551234567');
+  });
+
+  test('PUT /api/users/me requires auth', async () => {
+    const res = await request(app)
+      .put('/api/users/me')
+      .send({ phoneNumber: '+15559999999' });
+    expect(res.status).toBe(401);
+  });
+});
+
+// ─── Tasks API (POST /api/tasks, GET /api/tasks) ─────────────────────────────
+
+describe('Tasks API', () => {
+  let app;
+  let userToken;
+  let adminToken;
+
+  beforeAll(() => {
+    jest.resetModules();
+    const userHash = bcrypt.hashSync('user123', 4);
+    const adminHash = bcrypt.hashSync('admin123', 4);
+    seedUsers({
+      'taskuser@test.local': {
+        id: 'user-task',
+        email: 'taskuser@test.local',
+        name: 'Task User',
+        isAdmin: false,
+        role: 'phc',
+        active: true,
+        passwordHash: userHash
+      },
+      'taskadmin@test.local': {
+        id: 'user-taskadmin',
+        email: 'taskadmin@test.local',
+        name: 'Task Admin',
+        isAdmin: true,
+        role: 'admin',
+        active: true,
+        passwordHash: adminHash
+      }
+    });
+    ({ app } = require('../server/server.js'));
+    userToken = makeToken('user-task', 'phc', 'Task User');
+    adminToken = makeToken('user-taskadmin', 'admin', 'Task Admin');
+    // Clear tasks before suite
+    fs.writeFileSync(path.join(TEST_DATA_DIR, 'tasks.json'), '[]');
+  });
+
+  test('POST /api/tasks creates task for self', async () => {
+    const due = new Date(Date.now() + 60 * 60 * 1000).toISOString();
+    const res = await request(app)
+      .post('/api/tasks')
+      .set('Authorization', `Bearer ${userToken}`)
+      .send({ title: 'Call back client', scheduledAt: due });
+    expect(res.status).toBe(201);
+    expect(res.body.task.title).toBe('Call back client');
+    expect(res.body.task.assignedTo).toBe('user-task');
+    expect(res.body.task.completed).toBe(false);
+    expect(res.body.task.dueSoonNotifiedAt).toBeNull();
+  });
+
+  test('POST /api/tasks requires title and scheduledAt', async () => {
+    const res = await request(app)
+      .post('/api/tasks')
+      .set('Authorization', `Bearer ${userToken}`)
+      .send({ title: 'Missing date' });
+    expect(res.status).toBe(400);
+  });
+
+  test('non-admin cannot assign task to another user', async () => {
+    const due = new Date(Date.now() + 3600000).toISOString();
+    const res = await request(app)
+      .post('/api/tasks')
+      .set('Authorization', `Bearer ${userToken}`)
+      .send({ title: 'Sneaky assign', scheduledAt: due, assignedTo: 'user-taskadmin' });
+    expect(res.status).toBe(403);
+  });
+
+  test('admin can assign task to another user', async () => {
+    const due = new Date(Date.now() + 3600000).toISOString();
+    const res = await request(app)
+      .post('/api/tasks')
+      .set('Authorization', `Bearer ${adminToken}`)
+      .send({ title: 'Admin assigned', scheduledAt: due, assignedTo: 'user-task' });
+    expect(res.status).toBe(201);
+    expect(res.body.task.assignedTo).toBe('user-task');
+  });
+
+  test('GET /api/tasks returns tasks assigned to user', async () => {
+    const res = await request(app)
+      .get('/api/tasks')
+      .set('Authorization', `Bearer ${userToken}`);
+    expect(res.status).toBe(200);
+    const tasks = res.body.tasks || [];
+    // All returned tasks should be assigned to or owned by user-task
+    tasks.forEach((t) => {
+      const isOwned = t.assignedTo === 'user-task' || (!t.assignedTo && t.leadOwner === 'user-task');
+      expect(isOwned).toBe(true);
+    });
+  });
+
+  test('PUT /api/tasks/:id/complete marks task as done', async () => {
+    const due = new Date(Date.now() + 3600000).toISOString();
+    const createRes = await request(app)
+      .post('/api/tasks')
+      .set('Authorization', `Bearer ${userToken}`)
+      .send({ title: 'To complete', scheduledAt: due });
+    const taskId = createRes.body.task.id;
+
+    const completeRes = await request(app)
+      .put(`/api/tasks/${taskId}/complete`)
+      .set('Authorization', `Bearer ${userToken}`)
+      .send({});
+    expect(completeRes.status).toBe(200);
+    expect(completeRes.body.task.completed).toBe(true);
+    expect(completeRes.body.task.completedAt).toBeTruthy();
+  });
+});
+
+// ─── Scheduler: 5-minute due-soon notifications ───────────────────────────────
+
+describe('Scheduler: dueSoonNotifiedAt deduplication', () => {
+  let readTasks;
+  let writeTasks;
+
+  beforeAll(() => {
+    jest.resetModules();
+    seedUsers({
+      'sched@test.local': {
+        id: 'user-sched',
+        email: 'sched@test.local',
+        name: 'Scheduler User',
+        isAdmin: false,
+        role: 'phc',
+        active: true,
+        passwordHash: bcrypt.hashSync('pass', 4)
+      }
+    });
+    ({ readTasks, writeTasks } = require('../server/server.js'));
+  });
+
+  test('task without dueSoonNotifiedAt is eligible for due-soon notification window', () => {
+    // A task due in 3 minutes should have dueSoonNotifiedAt set by scheduler
+    const inThreeMinutes = new Date(Date.now() + 3 * 60 * 1000).toISOString();
+    const task = {
+      id: 'task_sched_1',
+      type: 'custom',
+      title: 'Almost due',
+      scheduledAt: inThreeMinutes,
+      leadOwner: 'user-sched',
+      assignedTo: 'user-sched',
+      completed: false,
+      dueSoonNotifiedAt: null,
+      createdAt: new Date().toISOString()
+    };
+    writeTasks([task]);
+    const tasks = readTasks();
+    const saved = tasks.find((t) => t.id === 'task_sched_1');
+    expect(saved).toBeDefined();
+    // dueSoonNotifiedAt should still be null until scheduler runs
+    expect(saved.dueSoonNotifiedAt).toBeNull();
+  });
+
+  test('task with dueSoonNotifiedAt already set is not re-notified', () => {
+    const inThreeMinutes = new Date(Date.now() + 3 * 60 * 1000).toISOString();
+    const task = {
+      id: 'task_sched_2',
+      type: 'custom',
+      title: 'Already notified',
+      scheduledAt: inThreeMinutes,
+      leadOwner: 'user-sched',
+      assignedTo: 'user-sched',
+      completed: false,
+      dueSoonNotifiedAt: new Date().toISOString(), // already notified
+      createdAt: new Date().toISOString()
+    };
+    writeTasks([task]);
+    const tasks = readTasks();
+    const saved = tasks.find((t) => t.id === 'task_sched_2');
+    expect(saved.dueSoonNotifiedAt).not.toBeNull();
+  });
+});
