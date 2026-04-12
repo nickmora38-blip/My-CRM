@@ -1,6 +1,7 @@
 const express = require('express');
 const fs = require('fs');
 const path = require('path');
+const https = require('https');
 const jwt = require('jsonwebtoken');
 const bcrypt = require('bcryptjs');
 const crypto = require('crypto');
@@ -10,7 +11,7 @@ const app = express();
 const PORT = process.env.PORT || 3001;
 const NODE_ENV = process.env.NODE_ENV || 'development';
 const JWT_SECRET = process.env.JWT_SECRET || 'dev-only-secret-change-in-production';
-const DATA_DIR = path.join(__dirname, 'data');
+const DATA_DIR = process.env.DATA_DIR_OVERRIDE || path.join(__dirname, 'data');
 const LEADS_FILE = path.join(DATA_DIR, 'leads.json');
 const USERS_FILE = path.join(DATA_DIR, 'users.json');
 const TEMPLATES_FILE = path.join(DATA_DIR, 'emailTemplates.json');
@@ -47,11 +48,150 @@ const ACTIVE_CUSTOMER_STATUSES = [
   'Appraisal', 'Docs Ordered', 'Closed Pending Delivery', 'Delivered Pending Funding',
   'Funded', 'Trimout Pending', 'Trimmed Out Pending Addl Work', 'Completed', 'Closed'
 ];
-const VALID_LENDERS = ['21ST', 'CPM', 'Triad', 'CUHU', 'Cash', 'Other', 'CSL', 'Calcon'];
+const VALID_LENDERS = ['21ST Mortgage'];
 const VALID_RESPONSE_STATUSES = ['answered', 'not_answered', 'left_vm', 'text'];
 const VALID_LEAD_STATUSES = ['pending_info', 'completing_application', 'appointment_set', 'answered'];
 const VALID_FINANCING = ['cash', 'finance', 'credit_repair'];
 const VALID_MOVE_TIMELINES = ['90_days_or_less', '3_6_months', 'not_ready'];
+
+// DocuSign configuration (set via environment variables)
+const DOCUSIGN_INTEGRATION_KEY = process.env.DOCUSIGN_INTEGRATION_KEY || '';
+const DOCUSIGN_SECRET_KEY = process.env.DOCUSIGN_SECRET_KEY || '';
+const DOCUSIGN_ACCOUNT_ID = process.env.DOCUSIGN_ACCOUNT_ID || '';
+const DOCUSIGN_BASE_URL = process.env.DOCUSIGN_BASE_URL || 'https://demo.docusign.net/restapi';
+const DOCUSIGN_REDIRECT_URI = process.env.DOCUSIGN_REDIRECT_URI || 'http://localhost:3001/docusign/callback';
+const DOCUSIGN_USER_ID = process.env.DOCUSIGN_USER_ID || '';
+const DOCUSIGN_PRIVATE_KEY = process.env.DOCUSIGN_PRIVATE_KEY || '';
+
+// DocuSign token cache
+let _docusignAccessToken = null;
+let _docusignTokenExpiry = 0;
+
+async function docusignRequest(method, urlPath, body, accessToken) {
+  return new Promise((resolve, reject) => {
+    const baseUrl = new URL(DOCUSIGN_BASE_URL);
+    const options = {
+      hostname: baseUrl.hostname,
+      path: urlPath,
+      method,
+      headers: {
+        'Authorization': `Bearer ${accessToken}`,
+        'Content-Type': 'application/json',
+        'Accept': 'application/json'
+      }
+    };
+    const bodyStr = body ? JSON.stringify(body) : null;
+    if (bodyStr) options.headers['Content-Length'] = Buffer.byteLength(bodyStr);
+
+    const req = https.request(options, (res) => {
+      let data = '';
+      res.on('data', (chunk) => { data += chunk; });
+      res.on('end', () => {
+        try {
+          resolve({ status: res.statusCode, data: JSON.parse(data) });
+        } catch (e) {
+          resolve({ status: res.statusCode, data });
+        }
+      });
+    });
+    req.on('error', reject);
+    if (bodyStr) req.write(bodyStr);
+    req.end();
+  });
+}
+
+async function getDocusignAccessToken() {
+  if (_docusignAccessToken && Date.now() < _docusignTokenExpiry) {
+    return _docusignAccessToken;
+  }
+  if (!DOCUSIGN_INTEGRATION_KEY || !DOCUSIGN_SECRET_KEY) {
+    throw new Error('DocuSign credentials not configured. Set DOCUSIGN_INTEGRATION_KEY and DOCUSIGN_SECRET_KEY environment variables.');
+  }
+  // Using Authorization Code Grant: exchange DOCUSIGN_SECRET_KEY (access token) directly,
+  // or use client_credentials if set up. For simplicity this implementation supports
+  // providing a long-lived access token via DOCUSIGN_SECRET_KEY.
+  _docusignAccessToken = DOCUSIGN_SECRET_KEY;
+  _docusignTokenExpiry = Date.now() + 3600 * 1000;
+  return _docusignAccessToken;
+}
+
+function buildApplicationDocumentBase64(app) {
+  const b = app.borrower || {};
+  const emp = app.employment || {};
+  const inc = app.incomeAssets || {};
+  const prop = app.property || {};
+  const home = app.homeSelection || {};
+  const co = app.coBorrower || {};
+  const lines = [
+    'EXCLUSIVE MANUFACTURE HOMES AND TRANSPORT',
+    'APPLICATION FOR MANUFACTURED HOME FINANCING',
+    '='.repeat(60),
+    '',
+    `Date: ${new Date(app.submittedAt || Date.now()).toLocaleDateString()}`,
+    `Application ID: ${app.id || ''}`,
+    `Submitted By: ${app.submittedByName || ''}`,
+    '',
+    'BORROWER INFORMATION',
+    '-'.repeat(40),
+    `Name: ${b.firstName || ''} ${b.lastName || ''}`,
+    `Date of Birth: ${b.dob || ''}`,
+    `Phone: ${b.phone || ''}`,
+    `Email: ${b.email || ''}`,
+    `Address: ${b.address || ''}, ${b.city || ''}, ${b.state || ''} ${b.zip || ''}`,
+    '',
+    co.firstName ? [
+      'CO-BORROWER INFORMATION',
+      '-'.repeat(40),
+      `Name: ${co.firstName || ''} ${co.lastName || ''}`,
+      `Phone: ${co.phone || ''}`,
+      `Email: ${co.email || ''}`,
+      ''
+    ].join('\n') : '',
+    'EMPLOYMENT',
+    '-'.repeat(40),
+    `Employer: ${emp.employer || ''}`,
+    `Position: ${emp.position || ''}`,
+    `Years Employed: ${emp.yearsEmployed || ''}`,
+    `Monthly Income: $${emp.monthlyIncome || '0'}`,
+    `Employment Type: ${emp.employmentType || ''}`,
+    '',
+    'INCOME & ASSETS',
+    '-'.repeat(40),
+    `Other Monthly Income: $${inc.otherIncome || '0'}`,
+    `Bank Name: ${inc.bankName || ''}`,
+    `Account Balance: $${inc.accountBalance || '0'}`,
+    `Other Assets: ${inc.otherAssets || ''}`,
+    '',
+    'PROPERTY INFORMATION',
+    '-'.repeat(40),
+    `Property Address: ${prop.address || ''}, ${prop.city || ''}, ${prop.state || ''} ${prop.zip || ''}`,
+    `Land Status: ${prop.landOwned || ''}`,
+    `Property Type: ${prop.propType || ''}`,
+    '',
+    'HOME SELECTION',
+    '-'.repeat(40),
+    `Model: ${home.model || ''}`,
+    `Manufacturer: ${home.manufacturer || ''}`,
+    `Year: ${home.year || ''}`,
+    `Size: ${home.size || ''}`,
+    `Condition: ${home.condition || ''}`,
+    '',
+    'NOTES',
+    '-'.repeat(40),
+    app.notes || '',
+    '',
+    '='.repeat(60),
+    'SIGNATURE',
+    '',
+    'By signing below, I certify that the information provided is accurate and complete.',
+    '',
+    'Borrower Signature: ________________________  Date: __________',
+    '',
+    co.firstName ? 'Co-Borrower Signature: _____________________  Date: __________\n' : '',
+    '='.repeat(60)
+  ].filter((l) => l !== null && l !== undefined).join('\n');
+  return Buffer.from(lines).toString('base64');
+}
 
 // Recall campaign schedule:
 // Phase 1 (days 1-5): 4 calls/day at 7am, 11am, 3pm, 7pm
@@ -257,7 +397,7 @@ function readDealerApps() { return readJson(DEALER_APPS_FILE, []); }
 function writeDealerApps(data) { writeJson(DEALER_APPS_FILE, data); }
 function readClosingDocs() { return readJson(CLOSING_DOCS_FILE, {}); }
 function writeClosingDocs(data) { writeJson(CLOSING_DOCS_FILE, data); }
-function readSettings() { return readJson(SETTINGS_FILE, { calcUrl: 'https://www.mortgagecalculator.org/' }); }
+function readSettings() { return readJson(SETTINGS_FILE, { calcUrl: 'https://www.21stmortgage.com/web/21stsite.nsf/calculators#mortgage-calculator' }); }
 function writeSettings(data) { writeJson(SETTINGS_FILE, data); }
 function getCustomerDocDir(customerId) {
   const dir = path.join(DOCUMENTS_DIR, customerId);
@@ -1577,6 +1717,40 @@ app.put('/api/active-customers/:id', (req, res) => {
   };
 
   writeActiveCustomers(customers);
+
+  // ── Automation: notify management when status reaches "Completed" ──────────
+  const newStatus = customers[idx].status;
+  const oldStatus = customer.status;
+  if (newStatus === 'Completed' && oldStatus !== 'Completed') {
+    const tasks = readTasks();
+    // Idempotency: skip if a review task already exists for this customer
+    const alreadyExists = tasks.some(
+      (t) => t.customerId === customer.id && t.type === 'review_completed_app' && !t.completed
+    );
+    if (!alreadyExists) {
+      const adminUsers = Object.values(users).filter((u) => isAdminUser(u) && u.active !== false);
+      const taskNow = new Date().toISOString();
+      const customerName = `${customers[idx].firstName} ${customers[idx].lastName}`.trim();
+      adminUsers.forEach((adminUser) => {
+        tasks.push({
+          id: `task_${crypto.randomUUID()}`,
+          customerId: customer.id,
+          leadId: customer.leadId || null,
+          leadOwner: adminUser.id,
+          type: 'review_completed_app',
+          phase: null,
+          title: `Review Completed Application: ${customerName}`,
+          notes: `Application for ${customerName} has been marked Completed. Submitted ${customers[idx].createdAt ? new Date(customers[idx].createdAt).toLocaleDateString() : 'N/A'}. Review record at /active-customers/${customer.id}.`,
+          scheduledAt: taskNow,
+          completed: false,
+          completedAt: null,
+          createdAt: taskNow
+        });
+      });
+      writeTasks(tasks);
+    }
+  }
+
   res.json({ customer: customers[idx] });
 });
 
@@ -1967,6 +2141,137 @@ app.post('/api/dealer-applications', (req, res) => {
   res.status(201).json({ application });
 });
 
+// POST /api/dealer-applications/:id/docusign — send application for DocuSign signature
+app.post('/api/dealer-applications/:id/docusign', async (req, res) => {
+  const apps = readDealerApps();
+  const idx = apps.findIndex((a) => a.id === req.params.id);
+  if (idx === -1) return res.status(404).json({ error: 'Application not found' });
+
+  const application = apps[idx];
+  // Only allow the submitter or an admin to send for signing
+  const users = readUsers();
+  const userRecord = Object.values(users).find((u) => u.id === req.user.sub);
+  const isAdmin = isAdminUser(userRecord);
+  if (application.submittedBy !== req.user.sub && !isAdmin) {
+    return res.status(403).json({ error: 'Only the application creator or admin can send for signature' });
+  }
+
+  if (!DOCUSIGN_INTEGRATION_KEY || !DOCUSIGN_SECRET_KEY || !DOCUSIGN_ACCOUNT_ID) {
+    return res.status(503).json({ error: 'DocuSign is not configured. Please set DOCUSIGN_INTEGRATION_KEY, DOCUSIGN_SECRET_KEY, and DOCUSIGN_ACCOUNT_ID environment variables.' });
+  }
+
+  try {
+    const accessToken = await getDocusignAccessToken();
+    const b = application.borrower || {};
+    const signerName = `${b.firstName || ''} ${b.lastName || ''}`.trim() || 'Applicant';
+    const signerEmail = b.email || req.user.email || '';
+    if (!signerEmail) {
+      return res.status(400).json({ error: 'Borrower email is required to send for DocuSign signature' });
+    }
+
+    const docBase64 = buildApplicationDocumentBase64(application);
+    const envelopeBody = {
+      emailSubject: 'Please sign your Manufactured Home Application',
+      documents: [
+        {
+          documentBase64: docBase64,
+          name: 'Application',
+          fileExtension: 'txt',
+          documentId: '1'
+        }
+      ],
+      recipients: {
+        signers: [
+          {
+            email: signerEmail,
+            name: signerName,
+            recipientId: '1',
+            tabs: {
+              signHereTabs: [
+                { anchorString: 'Borrower Signature:', anchorUnits: 'pixels', anchorXOffset: '200', anchorYOffset: '-5' }
+              ],
+              dateSignedTabs: [
+                { anchorString: 'Borrower Signature:', anchorUnits: 'pixels', anchorXOffset: '370', anchorYOffset: '-5' }
+              ]
+            }
+          }
+        ]
+      },
+      status: 'sent'
+    };
+
+    const urlPath = `/restapi/v2.1/accounts/${DOCUSIGN_ACCOUNT_ID}/envelopes`;
+    const result = await docusignRequest('POST', urlPath, envelopeBody, accessToken);
+
+    if (result.status !== 201) {
+      return res.status(502).json({ error: 'DocuSign API error', details: result.data });
+    }
+
+    const envelopeId = result.data.envelopeId;
+    const now = new Date().toISOString();
+
+    // Get embedded signing URL if signer redirect URL provided
+    let signingUrl = null;
+    const returnUrl = req.body.returnUrl || `${process.env.APP_URL || 'http://localhost:3001'}/docusign-complete`;
+    const viewBody = {
+      returnUrl,
+      authenticationMethod: 'none',
+      email: signerEmail,
+      userName: signerName,
+      recipientId: '1'
+    };
+    const viewPath = `/restapi/v2.1/accounts/${DOCUSIGN_ACCOUNT_ID}/envelopes/${envelopeId}/views/recipient`;
+    const viewResult = await docusignRequest('POST', viewPath, viewBody, accessToken);
+    if (viewResult.status === 201 && viewResult.data.url) {
+      signingUrl = viewResult.data.url;
+    }
+
+    apps[idx] = { ...application, docusignEnvelopeId: envelopeId, docusignStatus: 'sent', docusignSentAt: now, docusignSigningUrl: signingUrl, updatedAt: now };
+    writeDealerApps(apps);
+
+    res.json({ envelopeId, signingUrl, status: 'sent' });
+  } catch (err) {
+    console.error('DocuSign error:', err);
+    res.status(500).json({ error: err.message || 'Failed to send DocuSign envelope' });
+  }
+});
+
+// GET /api/dealer-applications/:id/docusign/status — poll envelope status
+app.get('/api/dealer-applications/:id/docusign/status', async (req, res) => {
+  const apps = readDealerApps();
+  const application = apps.find((a) => a.id === req.params.id);
+  if (!application) return res.status(404).json({ error: 'Application not found' });
+
+  if (!application.docusignEnvelopeId) {
+    return res.json({ status: 'not_sent', envelopeId: null });
+  }
+
+  if (!DOCUSIGN_INTEGRATION_KEY || !DOCUSIGN_SECRET_KEY || !DOCUSIGN_ACCOUNT_ID) {
+    return res.json({ status: application.docusignStatus || 'unknown', envelopeId: application.docusignEnvelopeId });
+  }
+
+  try {
+    const accessToken = await getDocusignAccessToken();
+    const urlPath = `/restapi/v2.1/accounts/${DOCUSIGN_ACCOUNT_ID}/envelopes/${application.docusignEnvelopeId}`;
+    const result = await docusignRequest('GET', urlPath, null, accessToken);
+    if (result.status === 200) {
+      const liveStatus = result.data.status;
+      // Update cached status
+      const idx = apps.findIndex((a) => a.id === req.params.id);
+      if (idx !== -1 && liveStatus) {
+        apps[idx].docusignStatus = liveStatus;
+        apps[idx].updatedAt = new Date().toISOString();
+        writeDealerApps(apps);
+      }
+      return res.json({ status: liveStatus, envelopeId: application.docusignEnvelopeId, signingUrl: application.docusignSigningUrl });
+    }
+    res.json({ status: application.docusignStatus || 'unknown', envelopeId: application.docusignEnvelopeId });
+  } catch (err) {
+    console.error('DocuSign status error:', err);
+    res.json({ status: application.docusignStatus || 'unknown', envelopeId: application.docusignEnvelopeId });
+  }
+});
+
 // ─── Closing Docs ─────────────────────────────────────────────────────────────
 
 app.use('/api/closing-docs', authMiddleware);
@@ -2020,9 +2325,13 @@ app.use((err, req, res, next) => {
   res.status(500).json({ error: NODE_ENV === 'production' ? 'Internal server error' : err.message });
 });
 
-app.listen(PORT, () => {
-  console.log(`✅ CRM server running on http://localhost:${PORT}`);
-  console.log(`📋 Environment: ${NODE_ENV}`);
-  console.log(`🔐 Auth: JWT (${JWT_SECRET === 'dev-only-secret-change-in-production' ? 'default secret' : 'custom secret'})`);
-  console.log(`💾 Data: ${LEADS_FILE}`);
-});
+if (require.main === module) {
+  app.listen(PORT, () => {
+    console.log(`✅ CRM server running on http://localhost:${PORT}`);
+    console.log(`📋 Environment: ${NODE_ENV}`);
+    console.log(`🔐 Auth: JWT (${JWT_SECRET === 'dev-only-secret-change-in-production' ? 'default secret' : 'custom secret'})`);
+    console.log(`💾 Data: ${LEADS_FILE}`);
+  });
+}
+
+module.exports = { app, buildApplicationDocumentBase64 };

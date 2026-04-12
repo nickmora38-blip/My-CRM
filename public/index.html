@@ -66,7 +66,9 @@
             <button id="deal-tracker-btn">📋 Deal Tracker</button>
             <button id="closing-docs-btn">📁 Closing Docs</button>
             <button id="dealer-app-btn">📄 Dealer App</button>
+            <button id="dealer-app-list-btn" class="hidden">📋 View Apps</button>
             <button id="ab-calc-btn">🏠 AB Calc</button>
+            <button id="max-advance-btn">📐 Max Advance</button>
             <button id="settings-btn" class="hidden">⚙️ Settings</button>
             <button id="users-btn" class="hidden">👥 Users</button>
             <button id="export-btn">📊 Reports</button>
@@ -178,14 +180,7 @@
               </select>
               <select id="pipeline-filter-lender" style="font-size:0.85rem">
                 <option value="">All Lenders</option>
-                <option>21ST</option>
-                <option>CPM</option>
-                <option>Triad</option>
-                <option>CUHU</option>
-                <option>Cash</option>
-                <option>Other</option>
-                <option>CSL</option>
-                <option>Calcon</option>
+                <option>21ST Mortgage</option>
               </select>
               <button id="pipeline-export-csv-btn" style="font-size:0.85rem">⬇️ Export CSV</button>
               <button id="pipeline-close-btn">✕ Close</button>
@@ -239,6 +234,44 @@
             </label>
           </div>
           <div id="closing-docs-content"></div>
+        </section>
+
+        <!-- Max Advance Calculators Panel -->
+        <section id="max-advance-panel" class="panel hidden" style="margin-bottom:16px">
+          <div class="toolbar">
+            <h3 style="margin:0">📐 Max Advance Calculators</h3>
+            <div class="toolbar-actions">
+              <button id="max-advance-close-btn">✕ Close</button>
+            </div>
+          </div>
+          <div id="max-advance-content" style="padding:16px">
+            <p class="muted" style="margin-bottom:16px">Download or view the EMH Max Advance calculation templates for all lenders.</p>
+            <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(320px,1fr));gap:16px">
+              <article class="card" style="padding:16px">
+                <h4 style="margin:0 0 8px">📄 Double/Triple Wide (DW/TW)</h4>
+                <p style="font-size:0.85rem;color:var(--text-muted,#aaa);margin:0 0 12px">EMH Master Calculation — Max Advance for All Lenders</p>
+                <div style="display:flex;gap:8px;flex-wrap:wrap">
+                  <a href="/calculators/EMH-Master-Calculation-Max-Advance-All-Lenders.prn" download class="btn-link" style="padding:6px 14px;border-radius:6px;background:var(--primary,#dc143c);color:#fff;text-decoration:none;font-size:0.85rem">⬇ Download .prn</a>
+                  <button type="button" class="view-calc-btn" data-file="EMH-Master-Calculation-Max-Advance-All-Lenders.prn" style="font-size:0.85rem">👁 View</button>
+                </div>
+              </article>
+              <article class="card" style="padding:16px">
+                <h4 style="margin:0 0 8px">📄 Single Wide (SW)</h4>
+                <p style="font-size:0.85rem;color:var(--text-muted,#aaa);margin:0 0 12px">Singlewides EMH Master Calculation — Max Advance for All Lenders</p>
+                <div style="display:flex;gap:8px;flex-wrap:wrap">
+                  <a href="/calculators/Singlewides-EMH-Master-Calculation-Max-Advance-All-Lenders.prn" download class="btn-link" style="padding:6px 14px;border-radius:6px;background:var(--primary,#dc143c);color:#fff;text-decoration:none;font-size:0.85rem">⬇ Download .prn</a>
+                  <button type="button" class="view-calc-btn" data-file="Singlewides-EMH-Master-Calculation-Max-Advance-All-Lenders.prn" style="font-size:0.85rem">👁 View</button>
+                </div>
+              </article>
+            </div>
+            <div id="max-advance-viewer" style="display:none;margin-top:20px">
+              <div class="toolbar" style="margin-bottom:8px">
+                <h4 id="max-advance-viewer-title" style="margin:0"></h4>
+                <button type="button" id="max-advance-viewer-close-btn" style="font-size:0.8rem">✕ Close Viewer</button>
+              </div>
+              <pre id="max-advance-viewer-content" style="background:var(--surface,#111);border:1px solid var(--border,#333);border-radius:8px;padding:16px;overflow:auto;max-height:500px;font-size:0.8rem;white-space:pre-wrap;word-break:break-word"></pre>
+            </div>
+          </div>
         </section>
 
         <section id="list-view">
@@ -653,9 +686,9 @@
     <dialog id="ab-calc-modal">
       <div style="min-width:700px;max-width:900px;max-height:90vh">
         <div class="toolbar" style="margin-bottom:8px">
-          <h3 style="margin:0">🏠 Mortgage Calculator</h3>
+          <h3 style="margin:0">🏠 21st Mortgage Calculator</h3>
           <div class="toolbar-actions">
-            <a id="ab-calc-open-tab-btn" href="#" target="_blank" style="font-size:0.85rem;padding:6px 12px;border-radius:6px;background:var(--surface);border:1px solid var(--border);color:var(--text);text-decoration:none">↗ Open in New Tab</a>
+            <a id="ab-calc-open-tab-btn" href="https://www.21stmortgage.com/web/21stsite.nsf/calculators#mortgage-calculator" target="_blank" style="font-size:0.85rem;padding:6px 12px;border-radius:6px;background:var(--surface);border:1px solid var(--border);color:var(--text);text-decoration:none">↗ Open in New Tab</a>
             <button type="button" id="ab-calc-close-btn">✕ Close</button>
           </div>
         </div>
