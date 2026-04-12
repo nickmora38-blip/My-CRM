@@ -33,4 +33,25 @@ export const adminAPI = {
   getUsers: () => api.get('/admin/users'),
 };
 
+export const tasksAPI = {
+  getAll: (params?: { completed?: boolean }) =>
+    api.get('/tasks', { params: params !== undefined ? { completed: params.completed } : undefined }),
+  create: (data: { title: string; scheduledAt: string; notes?: string; assignedTo?: string; leadId?: string }) =>
+    api.post('/tasks', data),
+  complete: (id: string) => api.put(`/tasks/${id}/complete`, {}),
+};
+
+export const pushAPI = {
+  getVapidPublicKey: () => api.get<{ publicKey: string | null }>('/push/vapid-public-key'),
+  subscribe: (subscription: PushSubscriptionJSON) => api.post('/push/subscribe', { subscription }),
+  unsubscribe: (endpoint: string) => api.delete('/push/unsubscribe', { data: { endpoint } }),
+};
+
+export const usersAPI = {
+  getMe: () => api.get('/users/me'),
+  updateMe: (data: { phoneNumber?: string; smsOptIn?: boolean; name?: string }) =>
+    api.put('/users/me', data),
+  getAll: () => api.get('/admin/users'),
+};
+
 export default api;

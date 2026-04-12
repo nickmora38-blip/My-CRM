@@ -62,6 +62,9 @@ export default function LeadsPage() {
   const [sortDir, setSortDir] = useState<SortDir>('desc');
   const [viewMode, setViewMode] = useState<ViewMode>('table');
   const [quickStatusId, setQuickStatusId] = useState<string | null>(null);
+  const [expandedCards, setExpandedCards] = useState<Record<string, boolean>>({});
+
+  const toggleCard = (id: string) => setExpandedCards((prev) => ({ ...prev, [id]: !prev[id] }));
 
   useEffect(() => {
     const fetchLeads = async () => {
@@ -224,8 +227,11 @@ export default function LeadsPage() {
       <span className="ml-1 text-gray-700">↕</span>
     );
 
+  // Normalize phone for tel: links (strip formatting, keep +)
+  const normPhone = (p: string) => p.replace(/[^\d+]/g, '');
+
   return (
-    <div className="min-h-screen bg-black" onClick={() => quickStatusId && setQuickStatusId(null)}>
+    <div className="min-h-screen bg-black pb-20 sm:pb-0" onClick={() => quickStatusId && setQuickStatusId(null)}>
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         {/* Header */}
         <div className="flex items-center justify-between mb-6 gap-3">
@@ -286,75 +292,40 @@ export default function LeadsPage() {
         </div>
 
         {viewMode === 'table' ? (
-          /* ── TABLE VIEW ── */
-          <div className="bg-exclusive-black-card border border-exclusive-black-border rounded-xl overflow-hidden">
-            <div className="overflow-x-auto">
-              <table className="w-full">
-                <thead>
-                  <tr className="border-b border-exclusive-black-border">
-                    <th
-                      className="text-left px-6 py-3 text-xs font-medium text-gray-400 uppercase tracking-wider cursor-pointer hover:text-white select-none"
-                      onClick={() => handleSort('name')}
-                    >
-                      Contact <SortIcon field="name" />
-                    </th>
-                    <th className="text-left px-6 py-3 text-xs font-medium text-gray-400 uppercase tracking-wider hidden lg:table-cell">Route</th>
-                    <th className="text-left px-6 py-3 text-xs font-medium text-gray-400 uppercase tracking-wider hidden md:table-cell">Home Type</th>
-                    <th
-                      className="text-left px-6 py-3 text-xs font-medium text-gray-400 uppercase tracking-wider cursor-pointer hover:text-white select-none"
-                      onClick={() => handleSort('status')}
-                    >
-                      Status <SortIcon field="status" />
-                    </th>
-                    <th
-                      className="text-left px-6 py-3 text-xs font-medium text-gray-400 uppercase tracking-wider hidden sm:table-cell cursor-pointer hover:text-white select-none"
-                      onClick={() => handleSort('estimatedValue')}
-                    >
-                      Value <SortIcon field="estimatedValue" />
-                    </th>
-                    <th
-                      className="text-left px-6 py-3 text-xs font-medium text-gray-400 uppercase tracking-wider hidden sm:table-cell cursor-pointer hover:text-white select-none"
-                      onClick={() => handleSort('source')}
-                    >
-                      Source <SortIcon field="source" />
-                    </th>
-                    <th className="px-6 py-3"></th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {filtered.map((lead, idx) => (
-                    <tr
+          /* ── TABLE / CARD VIEW ── */
+          <>
+            {/* Mobile cards (shown on xs/sm, hidden md+) */}
+            <div className="md:hidden space-y-3">
+              {filtered.length === 0 ? (
+                <div className="text-center py-16 text-gray-500 text-sm">
+                  {search || filterStatus !== 'all' ? 'No leads match your filters.' : 'No leads yet. Click "+ Add Lead" to get started.'}
+                </div>
+              ) : (
+                filtered.map((lead) => {
+                  const expanded = !!expandedCards[lead.id];
+                  return (
+                    <div
                       key={lead.id}
-                      className={`${idx < filtered.length - 1 ? 'border-b border-exclusive-black-border' : ''} hover:bg-black/40 transition-colors`}
+                      className="bg-exclusive-black-card border border-exclusive-black-border rounded-xl p-4"
                     >
-                      <td className="px-6 py-4">
+                      {/* Top: name + status */}
+                      <div className="flex items-start justify-between gap-2 mb-2">
                         <button
                           onClick={() => navigate(`/leads/${lead.id}`)}
-                          className="text-left"
+                          className="text-left flex-1 min-w-0"
                         >
-                          <p className="text-white font-medium text-sm hover:text-exclusive-red transition-colors">{lead.name}</p>
-                          <p className="text-gray-500 text-xs mt-0.5">{lead.email}</p>
-                          <p className="text-gray-600 text-xs">{lead.phone}</p>
+                          <p className="text-white font-semibold text-sm leading-tight hover:text-exclusive-red transition-colors truncate">{lead.name}</p>
                         </button>
-                      </td>
-                      <td className="px-6 py-4 hidden lg:table-cell">
-                        <p className="text-gray-300 text-sm">{lead.origin || '—'}</p>
-                        <p className="text-gray-500 text-xs mt-0.5">→ {lead.destination || '—'}</p>
-                      </td>
-                      <td className="px-6 py-4 hidden md:table-cell">
-                        <span className="text-gray-300 text-sm">{lead.homeType || '—'}</span>
-                      </td>
-                      <td className="px-6 py-4">
-                        <div className="relative" onClick={(e) => e.stopPropagation()}>
+                        <div className="relative shrink-0" onClick={(e) => e.stopPropagation()}>
                           <button
                             onClick={() => setQuickStatusId(quickStatusId === lead.id ? null : lead.id)}
                             className="focus:outline-none"
-                            title="Click to change status"
+                            title="Tap to change status"
                           >
                             <StatusBadge status={lead.status} />
                           </button>
                           {quickStatusId === lead.id && (
-                            <div className="absolute left-0 top-8 z-20 bg-exclusive-black-card border border-exclusive-black-border rounded-lg shadow-xl py-1 min-w-[140px]">
+                            <div className="absolute right-0 top-8 z-20 bg-exclusive-black-card border border-exclusive-black-border rounded-lg shadow-xl py-1 min-w-[140px]">
                               {STATUSES.map((s) => (
                                 <button
                                   key={s}
@@ -367,48 +338,255 @@ export default function LeadsPage() {
                             </div>
                           )}
                         </div>
-                      </td>
-                      <td className="px-6 py-4 hidden sm:table-cell">
-                        <span className="text-white text-sm font-medium">
-                          {lead.estimatedValue ? `$${lead.estimatedValue.toLocaleString()}` : '—'}
-                        </span>
-                      </td>
-                      <td className="px-6 py-4 hidden sm:table-cell">
-                        <span className="text-gray-400 text-xs">{lead.source}</span>
-                      </td>
-                      <td className="px-6 py-4">
-                        <div className="flex items-center gap-2">
-                          <button
-                            onClick={() => navigate(`/leads/${lead.id}`)}
-                            className="text-gray-400 hover:text-white text-xs transition-colors px-2 py-1 rounded hover:bg-exclusive-black-border"
+                      </div>
+
+                      {/* Contact action links */}
+                      <div className="flex flex-wrap gap-2 mb-3">
+                        {lead.phone && (
+                          <a
+                            href={`tel:${normPhone(lead.phone)}`}
+                            onClick={(e) => e.stopPropagation()}
+                            className="inline-flex items-center gap-1 px-2.5 py-1 bg-green-900/30 border border-green-800/40 rounded-lg text-green-400 text-xs font-medium hover:bg-green-900/50 transition-colors"
                           >
-                            View
-                          </button>
-                          <button
-                            onClick={() => openEdit(lead)}
-                            className="text-gray-400 hover:text-white text-xs transition-colors px-2 py-1 rounded hover:bg-exclusive-black-border"
+                            📞 {lead.phone}
+                          </a>
+                        )}
+                        {lead.email && (
+                          <a
+                            href={`mailto:${lead.email}`}
+                            onClick={(e) => e.stopPropagation()}
+                            className="inline-flex items-center gap-1 px-2.5 py-1 bg-blue-900/30 border border-blue-800/40 rounded-lg text-blue-400 text-xs font-medium hover:bg-blue-900/50 transition-colors truncate max-w-full"
                           >
-                            Edit
-                          </button>
-                          <button
-                            onClick={() => handleDelete(lead.id)}
-                            className="text-gray-500 hover:text-exclusive-red text-xs transition-colors px-2 py-1 rounded hover:bg-exclusive-red/10"
-                          >
-                            Delete
-                          </button>
+                            ✉ {lead.email}
+                          </a>
+                        )}
+                      </div>
+
+                      {/* Always-visible summary fields */}
+                      <div className="grid grid-cols-2 gap-x-4 gap-y-1 text-xs mb-3">
+                        {lead.estimatedValue != null && (
+                          <>
+                            <span className="text-gray-500">Value</span>
+                            <span className="text-white font-medium">${lead.estimatedValue.toLocaleString()}</span>
+                          </>
+                        )}
+                        {lead.source && (
+                          <>
+                            <span className="text-gray-500">Source</span>
+                            <span className="text-gray-300">{lead.source}</span>
+                          </>
+                        )}
+                        {lead.homeType && (
+                          <>
+                            <span className="text-gray-500">Home Type</span>
+                            <span className="text-gray-300">{lead.homeType}</span>
+                          </>
+                        )}
+                      </div>
+
+                      {/* Expandable details */}
+                      <button
+                        onClick={() => toggleCard(lead.id)}
+                        className="text-xs text-gray-500 hover:text-gray-300 transition-colors"
+                      >
+                        {expanded ? '▲ Less' : '▼ More details'}
+                      </button>
+                      {expanded && (
+                        <div className="mt-2 pt-2 border-t border-exclusive-black-border grid grid-cols-2 gap-x-4 gap-y-1 text-xs">
+                          {lead.origin && (
+                            <>
+                              <span className="text-gray-500">From</span>
+                              <span className="text-gray-300">{lead.origin}</span>
+                            </>
+                          )}
+                          {lead.destination && (
+                            <>
+                              <span className="text-gray-500">To</span>
+                              <span className="text-gray-300">{lead.destination}</span>
+                            </>
+                          )}
+                          {lead.moveDate && (
+                            <>
+                              <span className="text-gray-500">Move Date</span>
+                              <span className="text-gray-300">{lead.moveDate}</span>
+                            </>
+                          )}
+                          {lead.notes && (
+                            <div className="col-span-2 mt-1">
+                              <span className="text-gray-500 block mb-0.5">Notes</span>
+                              <span className="text-gray-300">{lead.notes}</span>
+                            </div>
+                          )}
+                          <div className="col-span-2 mt-1">
+                            <span className="text-gray-500 block mb-0.5">Created</span>
+                            <span className="text-gray-400">{new Date(lead.createdAt).toLocaleDateString()}</span>
+                          </div>
                         </div>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-              {filtered.length === 0 && (
-                <div className="text-center py-16 text-gray-500">
-                  {search || filterStatus !== 'all' ? 'No leads match your filters.' : 'No leads yet. Click "+ Add Lead" to get started.'}
-                </div>
+                      )}
+
+                      {/* Card actions */}
+                      <div className="flex gap-2 mt-3 pt-3 border-t border-exclusive-black-border">
+                        <button
+                          onClick={() => navigate(`/leads/${lead.id}`)}
+                          className="flex-1 py-1.5 text-xs font-medium text-gray-300 bg-black border border-exclusive-black-border rounded-lg hover:border-exclusive-red/50 hover:text-white transition-colors"
+                        >
+                          View
+                        </button>
+                        <button
+                          onClick={() => openEdit(lead)}
+                          className="flex-1 py-1.5 text-xs font-medium text-gray-300 bg-black border border-exclusive-black-border rounded-lg hover:border-exclusive-red/50 hover:text-white transition-colors"
+                        >
+                          Edit
+                        </button>
+                        <button
+                          onClick={() => handleDelete(lead.id)}
+                          className="flex-1 py-1.5 text-xs font-medium text-gray-500 bg-black border border-exclusive-black-border rounded-lg hover:border-exclusive-red/50 hover:text-exclusive-red transition-colors"
+                        >
+                          Delete
+                        </button>
+                      </div>
+                    </div>
+                  );
+                })
               )}
             </div>
-          </div>
+
+            {/* Desktop table (hidden on mobile) */}
+            <div className="hidden md:block bg-exclusive-black-card border border-exclusive-black-border rounded-xl overflow-hidden">
+              <div className="overflow-x-auto">
+                <table className="w-full">
+                  <thead>
+                    <tr className="border-b border-exclusive-black-border">
+                      <th
+                        className="text-left px-6 py-3 text-xs font-medium text-gray-400 uppercase tracking-wider cursor-pointer hover:text-white select-none"
+                        onClick={() => handleSort('name')}
+                      >
+                        Contact <SortIcon field="name" />
+                      </th>
+                      <th className="text-left px-6 py-3 text-xs font-medium text-gray-400 uppercase tracking-wider hidden lg:table-cell">Route</th>
+                      <th className="text-left px-6 py-3 text-xs font-medium text-gray-400 uppercase tracking-wider hidden md:table-cell">Home Type</th>
+                      <th
+                        className="text-left px-6 py-3 text-xs font-medium text-gray-400 uppercase tracking-wider cursor-pointer hover:text-white select-none"
+                        onClick={() => handleSort('status')}
+                      >
+                        Status <SortIcon field="status" />
+                      </th>
+                      <th
+                        className="text-left px-6 py-3 text-xs font-medium text-gray-400 uppercase tracking-wider cursor-pointer hover:text-white select-none"
+                        onClick={() => handleSort('estimatedValue')}
+                      >
+                        Value <SortIcon field="estimatedValue" />
+                      </th>
+                      <th
+                        className="text-left px-6 py-3 text-xs font-medium text-gray-400 uppercase tracking-wider cursor-pointer hover:text-white select-none"
+                        onClick={() => handleSort('source')}
+                      >
+                        Source <SortIcon field="source" />
+                      </th>
+                      <th className="px-6 py-3"></th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {filtered.map((lead, idx) => (
+                      <tr
+                        key={lead.id}
+                        className={`${idx < filtered.length - 1 ? 'border-b border-exclusive-black-border' : ''} hover:bg-black/40 transition-colors`}
+                      >
+                        <td className="px-6 py-4">
+                          <button
+                            onClick={() => navigate(`/leads/${lead.id}`)}
+                            className="text-left"
+                          >
+                            <p className="text-white font-medium text-sm hover:text-exclusive-red transition-colors">{lead.name}</p>
+                            <a
+                              href={`mailto:${lead.email}`}
+                              onClick={(e) => e.stopPropagation()}
+                              className="text-gray-500 hover:text-blue-400 text-xs mt-0.5 block transition-colors"
+                            >
+                              {lead.email}
+                            </a>
+                            <a
+                              href={`tel:${normPhone(lead.phone)}`}
+                              onClick={(e) => e.stopPropagation()}
+                              className="text-gray-600 hover:text-green-400 text-xs block transition-colors"
+                            >
+                              {lead.phone}
+                            </a>
+                          </button>
+                        </td>
+                        <td className="px-6 py-4 hidden lg:table-cell">
+                          <p className="text-gray-300 text-sm">{lead.origin || '—'}</p>
+                          <p className="text-gray-500 text-xs mt-0.5">→ {lead.destination || '—'}</p>
+                        </td>
+                        <td className="px-6 py-4 hidden md:table-cell">
+                          <span className="text-gray-300 text-sm">{lead.homeType || '—'}</span>
+                        </td>
+                        <td className="px-6 py-4">
+                          <div className="relative" onClick={(e) => e.stopPropagation()}>
+                            <button
+                              onClick={() => setQuickStatusId(quickStatusId === lead.id ? null : lead.id)}
+                              className="focus:outline-none"
+                              title="Click to change status"
+                            >
+                              <StatusBadge status={lead.status} />
+                            </button>
+                            {quickStatusId === lead.id && (
+                              <div className="absolute left-0 top-8 z-20 bg-exclusive-black-card border border-exclusive-black-border rounded-lg shadow-xl py-1 min-w-[140px]">
+                                {STATUSES.map((s) => (
+                                  <button
+                                    key={s}
+                                    onClick={() => handleQuickStatus(lead, s)}
+                                    className={`w-full text-left px-3 py-2 text-xs hover:bg-black/40 transition-colors ${s === lead.status ? 'text-exclusive-red' : 'text-gray-300'}`}
+                                  >
+                                    {s.replace('_', ' ').replace(/\b\w/g, (c) => c.toUpperCase())}
+                                  </button>
+                                ))}
+                              </div>
+                            )}
+                          </div>
+                        </td>
+                        <td className="px-6 py-4">
+                          <span className="text-white text-sm font-medium">
+                            {lead.estimatedValue ? `$${lead.estimatedValue.toLocaleString()}` : '—'}
+                          </span>
+                        </td>
+                        <td className="px-6 py-4">
+                          <span className="text-gray-400 text-xs">{lead.source}</span>
+                        </td>
+                        <td className="px-6 py-4">
+                          <div className="flex items-center gap-2">
+                            <button
+                              onClick={() => navigate(`/leads/${lead.id}`)}
+                              className="text-gray-400 hover:text-white text-xs transition-colors px-2 py-1 rounded hover:bg-exclusive-black-border"
+                            >
+                              View
+                            </button>
+                            <button
+                              onClick={() => openEdit(lead)}
+                              className="text-gray-400 hover:text-white text-xs transition-colors px-2 py-1 rounded hover:bg-exclusive-black-border"
+                            >
+                              Edit
+                            </button>
+                            <button
+                              onClick={() => handleDelete(lead.id)}
+                              className="text-gray-500 hover:text-exclusive-red text-xs transition-colors px-2 py-1 rounded hover:bg-exclusive-red/10"
+                            >
+                              Delete
+                            </button>
+                          </div>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+                {filtered.length === 0 && (
+                  <div className="text-center py-16 text-gray-500">
+                    {search || filterStatus !== 'all' ? 'No leads match your filters.' : 'No leads yet. Click "+ Add Lead" to get started.'}
+                  </div>
+                )}
+              </div>
+            </div>
+          </>
         ) : (
           /* ── KANBAN VIEW ── */
           <div className="overflow-x-auto pb-4">

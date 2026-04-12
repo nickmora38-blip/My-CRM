@@ -8,3 +8,29 @@ services:
         value: production
       - key: JWT_SECRET
         generateValue: true
+      # ── Web Push / PWA ─────────────────────────────────────────────────────
+      # Generate with: npx web-push generate-vapid-keys
+      - key: VAPID_PUBLIC_KEY
+        sync: false   # set in Render dashboard
+      - key: VAPID_PRIVATE_KEY
+        sync: false   # set in Render dashboard
+      - key: VAPID_SUBJECT
+        value: mailto:admin@example.com  # change to your email
+      # ── Twilio SMS ──────────────────────────────────────────────────────────
+      - key: TWILIO_ACCOUNT_SID
+        sync: false   # set in Render dashboard
+      - key: TWILIO_AUTH_TOKEN
+        sync: false   # set in Render dashboard
+      - key: TWILIO_FROM_NUMBER
+        sync: false   # set in Render dashboard (E.164 format: +15551234567)
+      # ── SMTP Email (optional) ───────────────────────────────────────────────
+      - key: SMTP_HOST
+        sync: false
+      - key: SMTP_PORT
+        value: '587'
+      - key: SMTP_USER
+        sync: false
+      - key: SMTP_PASS
+        sync: false
+      - key: SMTP_FROM
+        sync: false

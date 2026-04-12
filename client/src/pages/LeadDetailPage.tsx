@@ -118,7 +118,7 @@ export default function LeadDetailPage() {
   const labelClass = 'block text-xs font-medium text-gray-400 mb-1';
 
   return (
-    <div className="min-h-screen bg-black">
+    <div className="min-h-screen bg-black pb-20 sm:pb-0">
       <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         {/* Back + Actions */}
         <div className="flex items-center justify-between mb-6 gap-3">
@@ -145,8 +145,8 @@ export default function LeadDetailPage() {
             <div>
               <h1 className="text-2xl font-bold text-white mb-1">{lead.name}</h1>
               <div className="flex flex-wrap items-center gap-3 text-sm text-gray-400">
-                {lead.email && <span>✉ {lead.email}</span>}
-                {lead.phone && <span>📞 {lead.phone}</span>}
+                {lead.email && <a href={`mailto:${lead.email}`} className="hover:text-white transition-colors">✉ {lead.email}</a>}
+                {lead.phone && <a href={`tel:${lead.phone}`} className="hover:text-white transition-colors">📞 {lead.phone}</a>}
               </div>
               <div className="mt-3">
                 <StatusBadge status={lead.status} />
@@ -219,8 +219,8 @@ export default function LeadDetailPage() {
             <h2 className="text-white font-semibold mb-4">Contact Info</h2>
             <div className="space-y-3">
               <DetailRow label="Name" value={lead.name} />
-              <DetailRow label="Email" value={lead.email} />
-              <DetailRow label="Phone" value={lead.phone} />
+              <DetailRow label="Email" value={lead.email} href={lead.email ? `mailto:${lead.email}` : undefined} />
+              <DetailRow label="Phone" value={lead.phone} href={lead.phone ? `tel:${lead.phone}` : undefined} />
               <DetailRow label="Source" value={lead.source} />
               <DetailRow label="Status" value={lead.status.replace(/_/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase())} />
             </div>
@@ -307,11 +307,15 @@ export default function LeadDetailPage() {
   );
 }
 
-function DetailRow({ label, value }: { label: string; value?: string | null }) {
+function DetailRow({ label, value, href }: { label: string; value?: string | null; href?: string }) {
   return (
     <div className="flex items-start justify-between py-1.5 border-b border-exclusive-black-border last:border-0">
       <span className="text-gray-500 text-sm shrink-0 mr-3">{label}</span>
-      <span className="text-gray-200 text-sm text-right">{value || '—'}</span>
+      {href && value ? (
+        <a href={href} className="text-gray-200 text-sm text-right hover:text-exclusive-red transition-colors">{value}</a>
+      ) : (
+        <span className="text-gray-200 text-sm text-right">{value || '—'}</span>
+      )}
     </div>
   );
 }

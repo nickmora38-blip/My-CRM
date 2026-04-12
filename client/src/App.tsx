@@ -6,7 +6,10 @@ import RegisterPage from './pages/RegisterPage';
 import DashboardPage from './pages/DashboardPage';
 import LeadsPage from './pages/LeadsPage';
 import LeadDetailPage from './pages/LeadDetailPage';
+import TasksPage from './pages/TasksPage';
+import ProfilePage from './pages/ProfilePage';
 import Navbar from './components/Navbar';
+import BottomTabBar from './components/BottomTabBar';
 
 function ProtectedRoute({ children }: { children: React.ReactNode }) {
   const { token } = useSelector((state: RootState) => state.auth);
@@ -47,8 +50,25 @@ export default function App() {
             </ProtectedRoute>
           }
         />
+        <Route
+          path="/tasks"
+          element={
+            <ProtectedRoute>
+              <TasksPage />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/profile"
+          element={
+            <ProtectedRoute>
+              <ProfilePage />
+            </ProtectedRoute>
+          }
+        />
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
+      {token && <BottomTabBar />}
     </BrowserRouter>
   );
 }
