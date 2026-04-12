@@ -62,8 +62,14 @@
             <button id="contacts-btn">👥 Contacts</button>
             <button id="active-customers-btn">⭐ Active Customers</button>
             <button id="pipeline-btn">📊 Pipeline</button>
+            <button id="leads-tab-btn">🎯 Leads</button>
+            <button id="deal-tracker-btn">📋 Deal Tracker</button>
+            <button id="closing-docs-btn">📁 Closing Docs</button>
+            <button id="dealer-app-btn">📄 Dealer App</button>
+            <button id="ab-calc-btn">🏠 AB Calc</button>
+            <button id="settings-btn" class="hidden">⚙️ Settings</button>
             <button id="users-btn" class="hidden">👥 Users</button>
-            <button id="export-btn">⬇️ CSV</button>
+            <button id="export-btn">📊 Reports</button>
             <button id="logout-btn">Logout</button>
           </div>
         </header>
@@ -188,6 +194,53 @@
           <div id="pipeline-month-tabs" class="month-tabs"></div>
           <div id="pipeline-report-content"></div>
         </section>
+
+        <!-- Reports Panel -->
+        <section id="reports-panel" class="panel hidden" style="margin-bottom:16px">
+          <div class="toolbar">
+            <h3 style="margin:0">📊 Reports</h3>
+            <div class="toolbar-actions">
+              <button id="reports-close-btn">✕ Close</button>
+            </div>
+          </div>
+          <div class="contacts-pipeline-bar" id="reports-tab-bar">
+            <span data-report="leads-by-status" class="pipe-tab active">Leads by Status</span>
+            <span data-report="contacts-by-status" class="pipe-tab">Contacts by Status</span>
+            <span data-report="pipeline-crm" class="pipe-tab">Pipeline Report (CRM)</span>
+          </div>
+          <div id="reports-content"></div>
+        </section>
+
+        <!-- Deal Tracker Panel -->
+        <section id="deal-tracker-panel" class="panel hidden" style="margin-bottom:16px">
+          <div class="toolbar">
+            <h3 style="margin:0">📋 Master Deal Tracker</h3>
+            <div class="toolbar-actions">
+              <button id="new-deal-tracker-btn" class="primary">+ New Deal Tracker</button>
+              <button id="deal-tracker-close-btn">✕ Close</button>
+            </div>
+          </div>
+          <div id="deal-tracker-list"></div>
+        </section>
+
+        <!-- Closing Docs Panel -->
+        <section id="closing-docs-panel" class="panel hidden" style="margin-bottom:16px">
+          <div class="toolbar">
+            <h3 style="margin:0">📁 Closing Documents</h3>
+            <div class="toolbar-actions">
+              <button id="closing-docs-close-btn">✕ Close</button>
+            </div>
+          </div>
+          <div style="padding:12px 0 8px">
+            <label><strong>Select Customer:</strong>
+              <select id="closing-docs-customer-select" style="margin-left:8px;padding:4px 8px">
+                <option value="">— Select Active Customer —</option>
+              </select>
+            </label>
+          </div>
+          <div id="closing-docs-content"></div>
+        </section>
+
         <section id="list-view">
           <div class="filters">
             <input id="search-input" placeholder="Search name, route, source…" />
@@ -548,6 +601,95 @@
         </menu>
       </div>
     </dialog>
+    <!-- Deal Tracker Modal -->
+    <dialog id="deal-tracker-modal">
+      <div style="min-width:700px;max-width:900px;max-height:90vh;overflow-y:auto">
+        <div class="toolbar" style="margin-bottom:16px">
+          <h3 id="deal-tracker-modal-title" style="margin:0">Deal Tracker</h3>
+          <div class="toolbar-actions">
+            <button type="button" id="dt-print-btn" style="font-size:0.85rem">🖨️ Print</button>
+            <button type="button" id="dt-close-btn">✕ Close</button>
+          </div>
+        </div>
+        <div class="contacts-pipeline-bar" id="dt-tab-bar">
+          <span data-dt-tab="master" class="pipe-tab active">Master Deal Tracker</span>
+          <span data-dt-tab="bid" class="pipe-tab">Bid Request</span>
+          <span data-dt-tab="cocs" class="pipe-tab">C.O.C.S.</span>
+          <span data-dt-tab="commission" class="pipe-tab">Commission Pricing</span>
+          <span data-dt-tab="estimate" class="pipe-tab">Estimate Sheet</span>
+        </div>
+        <div id="dt-tab-content" style="padding-top:16px"></div>
+        <menu style="margin-top:16px">
+          <button type="button" id="dt-cancel-btn">Cancel</button>
+          <button type="button" id="dt-save-btn" class="primary">Save</button>
+        </menu>
+      </div>
+    </dialog>
+
+    <!-- Dealer Application Modal -->
+    <dialog id="dealer-app-modal">
+      <div style="min-width:600px;max-width:800px;max-height:90vh;overflow-y:auto">
+        <h3>📄 Dealer Application</h3>
+        <div id="dealer-app-form-content"></div>
+        <menu>
+          <button type="button" id="dealer-app-cancel-btn">Cancel</button>
+          <button type="button" id="dealer-app-submit-btn" class="primary">Submit Application</button>
+        </menu>
+      </div>
+    </dialog>
+
+    <!-- Dealer App List Modal (Admin) -->
+    <dialog id="dealer-app-list-modal">
+      <div style="min-width:600px;max-width:860px;max-height:90vh;overflow-y:auto">
+        <div class="toolbar" style="margin-bottom:16px">
+          <h3 style="margin:0">📄 Submitted Applications</h3>
+          <button type="button" id="dealer-app-list-close-btn">✕ Close</button>
+        </div>
+        <div id="dealer-app-list-content"></div>
+      </div>
+    </dialog>
+
+    <!-- AB Calculator Modal -->
+    <dialog id="ab-calc-modal">
+      <div style="min-width:700px;max-width:900px;max-height:90vh">
+        <div class="toolbar" style="margin-bottom:8px">
+          <h3 style="margin:0">🏠 Mortgage Calculator</h3>
+          <div class="toolbar-actions">
+            <a id="ab-calc-open-tab-btn" href="#" target="_blank" style="font-size:0.85rem;padding:6px 12px;border-radius:6px;background:var(--surface);border:1px solid var(--border);color:var(--text);text-decoration:none">↗ Open in New Tab</a>
+            <button type="button" id="ab-calc-close-btn">✕ Close</button>
+          </div>
+        </div>
+        <iframe id="ab-calc-iframe" style="width:100%;height:560px;border:1px solid var(--border);border-radius:8px" sandbox="allow-scripts allow-same-origin allow-forms"></iframe>
+      </div>
+    </dialog>
+
+    <!-- Settings Modal (Admin) -->
+    <dialog id="settings-modal">
+      <div style="min-width:440px">
+        <h3>⚙️ Settings</h3>
+        <div class="grid" style="gap:10px">
+          <label>Karl's Calculator URL <input id="settings-calc-url" type="url" placeholder="https://www.mortgagecalculator.org/" /></label>
+        </div>
+        <menu>
+          <button type="button" id="settings-cancel-btn">Cancel</button>
+          <button type="button" id="settings-save-btn" class="primary">Save Settings</button>
+        </menu>
+      </div>
+    </dialog>
+
+    <!-- User Permissions Modal (Admin) -->
+    <dialog id="permissions-modal">
+      <div style="min-width:440px">
+        <h3>⚙️ Page Permissions</h3>
+        <p class="muted" id="permissions-user-name"></p>
+        <div id="permissions-checkboxes" class="grid" style="gap:8px;margin:12px 0"></div>
+        <menu>
+          <button type="button" id="permissions-cancel-btn">Cancel</button>
+          <button type="button" id="permissions-save-btn" class="primary">Save Permissions</button>
+        </menu>
+      </div>
+    </dialog>
+
     <script src="/app.js"></script>
   </body>
 </html>

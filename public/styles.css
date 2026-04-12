@@ -865,3 +865,23 @@ code {
   color: var(--muted);
   white-space: nowrap;
 }
+
+/* ─── Reports panel ─────────────────────────────────────────── */
+#reports-content { overflow-x: auto; }
+#reports-content table { min-width: 600px; }
+
+/* ─── Deal Tracker modal ─────────────────────────────────────── */
+#dt-tab-content .grid.two-col { grid-template-columns: 1fr 1fr; }
+
+/* ─── Closing Docs panel ─────────────────────────────────────── */
+#closing-docs-content .card { padding: 12px 16px; }
+
+/* ─── AB Calc iframe ─────────────────────────────────────────── */
+#ab-calc-iframe { background: #fff; }
+
+/* ─── Permissions modal ──────────────────────────────────────── */
+#permissions-checkboxes label { display: flex; align-items: center; gap: 8px; }
+
+/* ─── Dealer App modal ───────────────────────────────────────── */
+#dealer-app-form-content fieldset { margin-bottom: 16px; border-radius: 8px; border: 1px solid var(--border); }
+#dealer-app-form-content legend { font-weight: 600; padding: 0 8px; }
