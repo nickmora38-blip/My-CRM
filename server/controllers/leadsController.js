@@ -26,7 +26,7 @@ function writeLeads(leads) {
 
 // ─── Validation ──────────────────────────────────────────────────────────────
 
-const VALID_STATUSES = ['New Lead', 'Hot Lead', 'Appointment Set', 'Active', 'Dead', 'Junk'];
+const VALID_STATUSES = ['new', 'contacted', 'qualified', 'proposal', 'closed_won', 'closed_lost'];
 const VALID_SOURCES  = ['Website', 'Referral', 'Social Media', 'Google Ads', 'Cold Call', 'Other'];
 const VALID_HOME_TYPES = ['Single Wide', 'Double Wide', 'Triple Wide', 'Park Model'];
 
@@ -110,8 +110,8 @@ function getStaleLeads(userId) {
         if (l.userId !== userId) return false;
         const lastActivity = new Date(l.updatedAt || l.createdAt).getTime();
         const age = now - lastActivity;
-        if (l.status === 'New Lead' && age > 7 * DAY) return true;
-        if (l.status === 'Hot Lead' && age > 14 * DAY) return true;
+        if (l.status === 'new' && age > 7 * DAY) return true;
+        if (l.status === 'contacted' && age > 14 * DAY) return true;
         return false;
     });
 }
@@ -129,8 +129,8 @@ async function flagStaleLeads() {
         const lastActivity = new Date(lead.updatedAt || lead.createdAt).getTime();
         const age = now - lastActivity;
         const isStale =
-            (lead.status === 'New Lead' && age > 7 * DAY) ||
-            (lead.status === 'Hot Lead' && age > 14 * DAY);
+            (lead.status === 'new' && age > 7 * DAY) ||
+            (lead.status === 'contacted' && age > 14 * DAY);
         if (isStale !== Boolean(lead.stale)) {
             lead.stale = isStale;
             changed = true;
@@ -174,7 +174,7 @@ async function createLead(userId, data) {
         name: String(data.name).trim(),
         email: email,
         phone: phone,
-        status: data.status || 'New Lead',
+        status: data.status || 'new',
         source: data.source || 'Website',
         notes: data.notes ? String(data.notes).trim() : '',
         homeType: data.homeType || '',

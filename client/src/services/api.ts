@@ -1,4 +1,6 @@
 import axios from 'axios';
+import { store } from '../store';
+import { logout } from '../store/slices/authSlice';
 
 const api = axios.create({
   baseURL: '/api',
@@ -11,6 +13,16 @@ api.interceptors.request.use((config) => {
   }
   return config;
 });
+
+api.interceptors.response.use(
+  (response) => response,
+  (error) => {
+    if (error.response?.status === 401 && !error.config?.url?.startsWith('/auth/')) {
+      store.dispatch(logout());
+    }
+    return Promise.reject(error);
+  }
+);
 
 export const authAPI = {
   login: (data: { email: string; password: string }) => api.post('/auth/login', data),
