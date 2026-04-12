@@ -57,7 +57,7 @@ const state = {
   activeReportTab: 'leads-by-status',
   dealerApplications: [],
   closingDocs: {},
-  settings: { calcUrl: 'https://www.mortgagecalculator.org/' },
+  settings: { calcUrl: 'https://www.21stmortgage.com/web/21stsite.nsf/calculators#mortgage-calculator' },
   permissionsUserId: null,
   leadsTabVisible: false
 };
@@ -255,7 +255,13 @@ const els = {
   permissionsUserName: document.getElementById('permissions-user-name'),
   permissionsCheckboxes: document.getElementById('permissions-checkboxes'),
   permissionsCancelBtn: document.getElementById('permissions-cancel-btn'),
-  permissionsSaveBtn: document.getElementById('permissions-save-btn')
+  permissionsSaveBtn: document.getElementById('permissions-save-btn'),
+  // Max Advance Calculators
+  maxAdvanceBtn: document.getElementById('max-advance-btn'),
+  maxAdvanceModal: document.getElementById('max-advance-modal'),
+  maxAdvanceCloseBtn: document.getElementById('max-advance-close-btn'),
+  maxAdvanceTabs: document.getElementById('max-advance-tabs'),
+  maxAdvanceContent: document.getElementById('max-advance-content')
 };
 
 // ─── API helper ───────────────────────────────────────────────────────────────
@@ -1610,7 +1616,8 @@ const PAGE_PERMISSIONS_LIST = [
   { key: 'closing-docs', label: 'Closing Docs' },
   { key: 'dealer-app', label: 'Dealer Application' },
   { key: 'tasks', label: 'Tasks' },
-  { key: 'templates', label: 'Templates' }
+  { key: 'templates', label: 'Templates' },
+  { key: 'canReviewSubmittedApplications', label: '🔑 Management: Review Submitted Applications' }
 ];
 
 function openPermissionsModal(user) {
@@ -1643,7 +1650,7 @@ els.permissionsSaveBtn.addEventListener('click', async () => {
 // ─── Settings modal ───────────────────────────────────────────────────────────
 
 function openSettingsModal() {
-  els.settingsCalcUrl.value = state.settings.calcUrl || 'https://www.mortgagecalculator.org/';
+  els.settingsCalcUrl.value = state.settings.calcUrl || 'https://www.21stmortgage.com/web/21stsite.nsf/calculators#mortgage-calculator';
   els.settingsModal.showModal();
 }
 
@@ -1662,7 +1669,7 @@ els.settingsSaveBtn.addEventListener('click', async () => {
 // ─── AB Calculator modal ─────────────────────────────────────────────────────
 
 function openAbCalcModal() {
-  const url = state.settings.calcUrl || 'https://www.mortgagecalculator.org/';
+  const url = state.settings.calcUrl || 'https://www.21stmortgage.com/web/21stsite.nsf/calculators#mortgage-calculator';
   els.abCalcIframe.src = url;
   els.abCalcOpenTabBtn.href = url;
   els.abCalcModal.showModal();
@@ -3305,6 +3312,218 @@ els.abCalcBtn.addEventListener('click', async () => {
   await loadSettings();
   openAbCalcModal();
 });
+
+// ─── Max Advance Calculators ──────────────────────────────────────────────────
+
+const MAX_ADVANCE_TABS = [
+  { id: 'doublewide', label: '🏠 Doublewide (EMH)' },
+  { id: 'singlewide', label: '🏚 Singlewide' }
+];
+
+function buildMaxAdvanceForm(type) {
+  const isDW = type === 'doublewide';
+  const title = isDW ? 'EMH Master Calculation – Max Advance (Doublewide)' : 'EMH Master Calculation – Max Advance (Singlewide)';
+
+  return `
+    <div class="mac-form" id="mac-form-${type}">
+      <div class="mac-header print-only">
+        <h2 style="margin:0 0 4px">${escHtml(title)}</h2>
+        <p style="margin:0;font-size:0.8rem;color:#666">21st Mortgage Corporation &nbsp;|&nbsp; <a href="https://www.21stmortgage.com/web/21stsite.nsf/calculators#mortgage-calculator" target="_blank" rel="noopener">21stmortgage.com</a></p>
+      </div>
+
+      <fieldset class="mac-section">
+        <legend>Borrower / Property Info</legend>
+        <div class="mac-grid">
+          <label>Borrower Name <input class="mac-input" id="mac-${type}-borrower" type="text" placeholder="First Last" /></label>
+          <label>Date <input class="mac-input" id="mac-${type}-date" type="date" /></label>
+          <label>Property Address <input class="mac-input span-2" id="mac-${type}-address" type="text" placeholder="Street, City, State ZIP" /></label>
+          <label>County <input class="mac-input" id="mac-${type}-county" type="text" /></label>
+          <label>State <input class="mac-input" id="mac-${type}-state" type="text" maxlength="2" /></label>
+        </div>
+      </fieldset>
+
+      <fieldset class="mac-section">
+        <legend>Home Information</legend>
+        <div class="mac-grid">
+          <label>Year <input class="mac-input" id="mac-${type}-year" type="number" min="1900" max="2100" placeholder="e.g. 2024" /></label>
+          <label>Make / Manufacturer <input class="mac-input" id="mac-${type}-make" type="text" placeholder="e.g. Clayton" /></label>
+          <label>Model <input class="mac-input" id="mac-${type}-model" type="text" /></label>
+          <label>Serial # <input class="mac-input" id="mac-${type}-serial" type="text" /></label>
+          <label>Size (sq ft) <input class="mac-input" id="mac-${type}-sqft" type="number" min="0" step="1" /></label>
+          ${isDW
+            ? `<label>Total Width (ft) <input class="mac-input" id="mac-${type}-width" type="number" min="0" step="0.5" placeholder="e.g. 28" /></label>`
+            : `<label>Width (ft) <input class="mac-input" id="mac-${type}-width" type="number" min="0" step="0.5" placeholder="e.g. 14" /></label>`
+          }
+          <label>Length (ft) <input class="mac-input" id="mac-${type}-length" type="number" min="0" step="0.5" placeholder="e.g. 60" /></label>
+          <label>Condition
+            <select class="mac-input" id="mac-${type}-condition">
+              <option value="new">New</option>
+              <option value="used">Used</option>
+              <option value="repo">Repo</option>
+            </select>
+          </label>
+          <label>HUD Label # <input class="mac-input" id="mac-${type}-hud" type="text" /></label>
+        </div>
+      </fieldset>
+
+      <fieldset class="mac-section">
+        <legend>Valuation &amp; Loan Calculation</legend>
+        <div class="mac-grid">
+          <label>Purchase Price ($) <input class="mac-input mac-calc-input" id="mac-${type}-purchasePrice" type="number" min="0" step="100" /></label>
+          <label>Appraised Value ($) <input class="mac-input mac-calc-input" id="mac-${type}-appraisedValue" type="number" min="0" step="100" /></label>
+          <label>Land Value ($) <input class="mac-input mac-calc-input" id="mac-${type}-landValue" type="number" min="0" step="100" value="0" /></label>
+          <label>Down Payment ($) <input class="mac-input mac-calc-input" id="mac-${type}-downPayment" type="number" min="0" step="100" value="0" /></label>
+          <label>Max LTV (%)
+            <select class="mac-input mac-calc-input" id="mac-${type}-ltv">
+              <option value="95">95%</option>
+              <option value="90">90%</option>
+              <option value="85">85%</option>
+              <option value="80" selected>80%</option>
+              <option value="75">75%</option>
+            </select>
+          </label>
+          <label>Loan Term (years)
+            <select class="mac-input mac-calc-input" id="mac-${type}-term">
+              <option value="30">30</option>
+              <option value="25">25</option>
+              <option value="20" selected>20</option>
+              <option value="15">15</option>
+              <option value="10">10</option>
+            </select>
+          </label>
+          <label>Interest Rate (%) <input class="mac-input mac-calc-input" id="mac-${type}-rate" type="number" min="0" max="30" step="0.01" placeholder="e.g. 7.50" /></label>
+        </div>
+      </fieldset>
+
+      <fieldset class="mac-section mac-results-section">
+        <legend>Calculated Results</legend>
+        <div class="mac-results-grid">
+          <div class="mac-result-row">
+            <span>Base Value (lower of Purchase Price or Appraised Value)</span>
+            <span class="mac-result-val" id="mac-${type}-baseValue">$0</span>
+          </div>
+          <div class="mac-result-row">
+            <span>Less: Land Value</span>
+            <span class="mac-result-val" id="mac-${type}-lessLand">$0</span>
+          </div>
+          <div class="mac-result-row mac-result-sub">
+            <span>Home-Only Value</span>
+            <span class="mac-result-val" id="mac-${type}-homeOnlyValue">$0</span>
+          </div>
+          <div class="mac-result-row mac-result-bold">
+            <span>Max Advance (LTV × Home-Only Value)</span>
+            <span class="mac-result-val" id="mac-${type}-maxAdvance">$0</span>
+          </div>
+          <div class="mac-result-row">
+            <span>Less: Down Payment</span>
+            <span class="mac-result-val" id="mac-${type}-lessDown">$0</span>
+          </div>
+          <div class="mac-result-row mac-result-total">
+            <span>Net Loan Amount</span>
+            <span class="mac-result-val" id="mac-${type}-netLoan">$0</span>
+          </div>
+          <div class="mac-result-row">
+            <span>Est. Monthly Payment (P&amp;I)</span>
+            <span class="mac-result-val" id="mac-${type}-monthly">$0</span>
+          </div>
+        </div>
+      </fieldset>
+
+      <fieldset class="mac-section">
+        <legend>Notes</legend>
+        <textarea class="mac-input" id="mac-${type}-notes" style="width:100%;min-height:60px;resize:vertical" placeholder="Additional notes…"></textarea>
+      </fieldset>
+
+      <div class="mac-footer no-print">
+        <p class="muted" style="font-size:0.8rem">
+          Calculator reference: <a href="https://www.21stmortgage.com/web/21stsite.nsf/calculators#mortgage-calculator" target="_blank" rel="noopener">21st Mortgage</a>
+        </p>
+        <button type="button" class="primary" onclick="window.print()">🖨 Print</button>
+      </div>
+    </div>
+  `;
+}
+
+function calculateMaxAdvance(type) {
+  const g = (id) => parseFloat(document.getElementById(`mac-${type}-${id}`)?.value || '0') || 0;
+  const getSelect = (id) => parseFloat(document.getElementById(`mac-${type}-${id}`)?.value || '0') || 0;
+  const fmt = (n) => new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 0 }).format(n);
+
+  const purchasePrice = g('purchasePrice');
+  const appraisedValue = g('appraisedValue');
+  const landValue = g('landValue');
+  const downPayment = g('downPayment');
+  const ltv = getSelect('ltv') / 100;
+  const term = getSelect('term');
+  const rate = g('rate') / 100 / 12;
+
+  const baseValue = purchasePrice > 0 && appraisedValue > 0
+    ? Math.min(purchasePrice, appraisedValue)
+    : Math.max(purchasePrice, appraisedValue);
+  const homeOnlyValue = Math.max(0, baseValue - landValue);
+  const maxAdvance = homeOnlyValue * ltv;
+  const netLoan = Math.max(0, maxAdvance - downPayment);
+
+  // Monthly payment calc (standard amortization)
+  let monthly = 0;
+  if (rate > 0 && term > 0 && netLoan > 0) {
+    const n = term * 12;
+    monthly = netLoan * (rate * Math.pow(1 + rate, n)) / (Math.pow(1 + rate, n) - 1);
+  } else if (rate === 0 && term > 0 && netLoan > 0) {
+    monthly = netLoan / (term * 12);
+  }
+
+  const set = (id, val) => {
+    const el = document.getElementById(`mac-${type}-${id}`);
+    if (el) el.textContent = val;
+  };
+
+  set('baseValue', fmt(baseValue));
+  set('lessLand', fmt(landValue));
+  set('homeOnlyValue', fmt(homeOnlyValue));
+  set('maxAdvance', fmt(maxAdvance));
+  set('lessDown', fmt(downPayment));
+  set('netLoan', fmt(netLoan));
+  set('monthly', fmt(monthly));
+}
+
+let maxAdvanceActiveTab = 'doublewide';
+
+function renderMaxAdvanceTabs() {
+  if (!els.maxAdvanceTabs || !els.maxAdvanceContent) return;
+  els.maxAdvanceTabs.innerHTML = MAX_ADVANCE_TABS
+    .map(({ id, label }) =>
+      `<span data-mac-tab="${escHtml(id)}" class="pipe-tab ${maxAdvanceActiveTab === id ? 'active' : ''}">${escHtml(label)}</span>`)
+    .join('');
+  els.maxAdvanceContent.innerHTML = buildMaxAdvanceForm(maxAdvanceActiveTab);
+
+  // Wire up real-time calculation
+  els.maxAdvanceContent.querySelectorAll('.mac-calc-input').forEach((input) => {
+    input.addEventListener('input', () => calculateMaxAdvance(maxAdvanceActiveTab));
+    input.addEventListener('change', () => calculateMaxAdvance(maxAdvanceActiveTab));
+  });
+
+  // Tab switching
+  els.maxAdvanceTabs.querySelectorAll('[data-mac-tab]').forEach((tab) => {
+    tab.addEventListener('click', () => {
+      maxAdvanceActiveTab = tab.dataset.macTab;
+      renderMaxAdvanceTabs();
+    });
+  });
+
+  calculateMaxAdvance(maxAdvanceActiveTab);
+}
+
+// Wire up Max Advance button
+if (els.maxAdvanceBtn) {
+  els.maxAdvanceBtn.addEventListener('click', () => {
+    renderMaxAdvanceTabs();
+    els.maxAdvanceModal.showModal();
+  });
+}
+if (els.maxAdvanceCloseBtn) {
+  els.maxAdvanceCloseBtn.addEventListener('click', () => els.maxAdvanceModal.close());
+}
 
 // Settings
 els.settingsBtn.addEventListener('click', async () => {

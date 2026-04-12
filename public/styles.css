@@ -885,3 +885,38 @@ code {
 /* ─── Dealer App modal ───────────────────────────────────────── */
 #dealer-app-form-content fieldset { margin-bottom: 16px; border-radius: 8px; border: 1px solid var(--border); }
 #dealer-app-form-content legend { font-weight: 600; padding: 0 8px; }
+
+/* ─── Max Advance Calculators ────────────────────────────────── */
+.mac-form { padding: 8px 0; }
+.mac-header { margin-bottom: 12px; }
+.mac-section { margin-bottom: 16px; border-radius: 8px; border: 1px solid var(--border); }
+.mac-section legend { font-weight: 600; padding: 0 8px; }
+.mac-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; padding: 8px; }
+.mac-grid .span-2 { grid-column: span 2; }
+.mac-input { display: block; width: 100%; padding: 6px 10px; background: var(--surface); border: 1px solid var(--border); border-radius: 6px; color: var(--ink); font-family: inherit; font-size: 0.9rem; margin-top: 4px; }
+.mac-input:focus { outline: 2px solid var(--accent); border-color: var(--accent); }
+.mac-results-section { border-color: var(--accent); }
+.mac-results-grid { padding: 8px; }
+.mac-result-row { display: flex; justify-content: space-between; align-items: center; padding: 6px 8px; border-bottom: 1px solid var(--line); font-size: 0.9rem; }
+.mac-result-row:last-child { border-bottom: none; }
+.mac-result-sub { background: rgba(255,255,255,0.03); }
+.mac-result-bold { font-weight: 600; background: rgba(220, 20, 60, 0.08); }
+.mac-result-total { font-weight: 700; font-size: 1rem; background: rgba(220, 20, 60, 0.15); color: #ff6b6b; }
+.mac-result-val { font-weight: 600; font-variant-numeric: tabular-nums; min-width: 100px; text-align: right; }
+.mac-footer { display: flex; justify-content: space-between; align-items: center; padding: 8px 0; }
+#max-advance-content label { display: block; font-size: 0.85rem; color: var(--muted); }
+
+/* ─── Max Advance Print Styles ───────────────────────────────── */
+@media print {
+  body * { visibility: hidden; }
+  #max-advance-modal, #max-advance-modal * { visibility: visible; }
+  #max-advance-modal { position: absolute; left: 0; top: 0; width: 100%; background: #fff !important; color: #000 !important; }
+  .no-print { display: none !important; }
+  .print-only { display: block !important; }
+  .mac-input { background: transparent !important; border: 1px solid #999 !important; color: #000 !important; }
+  .mac-result-row { color: #000 !important; }
+  .mac-result-total { color: #c00 !important; }
+  .pipe-tab, #max-advance-tabs { display: none !important; }
+  .mac-section { border-color: #999 !important; }
+  dialog { border: none !important; }
+}

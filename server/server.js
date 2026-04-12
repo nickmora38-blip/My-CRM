@@ -5,12 +5,40 @@ const jwt = require('jsonwebtoken');
 const bcrypt = require('bcryptjs');
 const crypto = require('crypto');
 const rateLimit = require('express-rate-limit');
+const nodemailer = require('nodemailer');
+
+// ─── Email transport (optional – configure via env vars) ──────────────────────
+// Set SMTP_HOST, SMTP_PORT, SMTP_USER, SMTP_PASS to enable real email delivery.
+// If unconfigured the service will log notifications instead of sending.
+const SMTP_CONFIGURED = !!(process.env.SMTP_HOST && process.env.SMTP_USER && process.env.SMTP_PASS);
+const emailTransport = SMTP_CONFIGURED
+  ? nodemailer.createTransport({
+      host: process.env.SMTP_HOST,
+      port: Number(process.env.SMTP_PORT || 587),
+      secure: process.env.SMTP_SECURE === 'true',
+      auth: { user: process.env.SMTP_USER, pass: process.env.SMTP_PASS }
+    })
+  : null;
+
+async function sendEmail({ to, subject, text, html }) {
+  if (!emailTransport) {
+    console.log(`[EMAIL - not configured] To: ${to} | Subject: ${subject}`);
+    return;
+  }
+  await emailTransport.sendMail({
+    from: process.env.SMTP_FROM || process.env.SMTP_USER,
+    to,
+    subject,
+    text,
+    html
+  });
+}
 
 const app = express();
 const PORT = process.env.PORT || 3001;
 const NODE_ENV = process.env.NODE_ENV || 'development';
 const JWT_SECRET = process.env.JWT_SECRET || 'dev-only-secret-change-in-production';
-const DATA_DIR = path.join(__dirname, 'data');
+const DATA_DIR = process.env.DATA_DIR_OVERRIDE || path.join(__dirname, 'data');
 const LEADS_FILE = path.join(DATA_DIR, 'leads.json');
 const USERS_FILE = path.join(DATA_DIR, 'users.json');
 const TEMPLATES_FILE = path.join(DATA_DIR, 'emailTemplates.json');
@@ -149,6 +177,15 @@ function readUsers() {
         role: 'phc',
         active: true,
         passwordHash: bcrypt.hashSync('alex123', 10)
+      },
+      'nmora_exclusive@outlook.com': {
+        id: 'user-nmora',
+        email: 'nmora_exclusive@outlook.com',
+        name: 'N. Mora (Admin)',
+        isAdmin: true,
+        role: 'admin',
+        active: true,
+        passwordHash: bcrypt.hashSync(process.env.NMORA_PASSWORD || 'changeme123', 10)
       }
     };
     writeJson(USERS_FILE, seeded);
@@ -170,6 +207,24 @@ function readUsers() {
       changed = true;
     }
   });
+  // Ensure nmora_exclusive@outlook.com always has admin privileges
+  const nmoraEmail = 'nmora_exclusive@outlook.com';
+  if (!users[nmoraEmail]) {
+    users[nmoraEmail] = {
+      id: 'user-nmora',
+      email: nmoraEmail,
+      name: 'N. Mora (Admin)',
+      isAdmin: true,
+      role: 'admin',
+      active: true,
+      passwordHash: bcrypt.hashSync(process.env.NMORA_PASSWORD || 'changeme123', 10)
+    };
+    changed = true;
+  } else if (!isAdminUser(users[nmoraEmail])) {
+    users[nmoraEmail].isAdmin = true;
+    users[nmoraEmail].role = 'admin';
+    changed = true;
+  }
   if (changed) writeJson(USERS_FILE, users);
   return users;
 }
@@ -257,7 +312,8 @@ function readDealerApps() { return readJson(DEALER_APPS_FILE, []); }
 function writeDealerApps(data) { writeJson(DEALER_APPS_FILE, data); }
 function readClosingDocs() { return readJson(CLOSING_DOCS_FILE, {}); }
 function writeClosingDocs(data) { writeJson(CLOSING_DOCS_FILE, data); }
-function readSettings() { return readJson(SETTINGS_FILE, { calcUrl: 'https://www.mortgagecalculator.org/' }); }
+const MORTGAGE_21ST_URL = 'https://www.21stmortgage.com/web/21stsite.nsf/calculators#mortgage-calculator';
+function readSettings() { return readJson(SETTINGS_FILE, { calcUrl: MORTGAGE_21ST_URL }); }
 function writeSettings(data) { writeJson(SETTINGS_FILE, data); }
 function getCustomerDocDir(customerId) {
   const dir = path.join(DOCUMENTS_DIR, customerId);
@@ -301,6 +357,122 @@ function adminMiddleware(req, res, next) {
 
 function isAdminUser(userRecord) {
   return userRecord && (userRecord.isAdmin || userRecord.role === 'admin');
+}
+
+// ─── Management access helpers ────────────────────────────────────────────────
+
+/** Returns true if the user has management/review access. */
+function hasManagementAccess(userRecord) {
+  if (!userRecord || userRecord.active === false) return false;
+  if (isAdminUser(userRecord)) return true;
+  return !!(userRecord.pagePermissions && userRecord.pagePermissions.canReviewSubmittedApplications);
+}
+
+/** Finds all active users with management access (admin or canReviewSubmittedApplications). */
+function getManagementUsers() {
+  const users = readUsers();
+  return Object.values(users).filter(hasManagementAccess);
+}
+
+/**
+ * Creates review tasks and sends email notifications to all management users
+ * for a newly submitted dealer/loan application.
+ * Idempotent: skips users already listed in application.notificationTaskIds.
+ */
+async function notifyManagementOfSubmission(application) {
+  const managers = getManagementUsers();
+  if (managers.length === 0) return;
+
+  const tasks = readTasks();
+  const apps = readDealerApps();
+  const appIdx = apps.findIndex((a) => a.id === application.id);
+
+  // Build the set of userIds already notified
+  const alreadyNotified = new Set(application.notificationTaskIds
+    ? Object.keys(application.notificationTaskIds)
+    : []);
+
+  const newTaskIds = {};
+  const emailPromises = [];
+  const now = new Date().toISOString();
+  const borrowerName = application.borrower
+    ? `${application.borrower.firstName || ''} ${application.borrower.lastName || ''}`.trim()
+    : 'Unknown';
+  const appLink = `${process.env.APP_URL || ''}/`;
+
+  for (const manager of managers) {
+    if (alreadyNotified.has(manager.id)) continue;
+
+    // Create in-app review task
+    const task = {
+      id: `task_${crypto.randomUUID()}`,
+      type: 'review_application',
+      title: `Review submitted loan application – ${borrowerName}`,
+      applicationId: application.id,
+      leadOwner: manager.id,
+      scheduledAt: now,
+      completed: false,
+      completedAt: null,
+      createdAt: now,
+      metadata: {
+        borrowerName,
+        submittedByName: application.submittedByName || '',
+        submittedAt: application.submittedAt,
+        appLink
+      }
+    };
+    tasks.push(task);
+    newTaskIds[manager.id] = task.id;
+
+    // Queue email notification
+    if (manager.email) {
+      emailPromises.push(
+        sendEmail({
+          to: manager.email,
+          subject: `[CRM] Loan Application Submitted – ${borrowerName}`,
+          text: [
+            `A new loan application has been submitted and requires your review.`,
+            ``,
+            `Borrower: ${borrowerName}`,
+            `Submitted by: ${application.submittedByName || 'Unknown'}`,
+            `Submitted at: ${application.submittedAt}`,
+            ``,
+            `Log in to review: ${appLink}`
+          ].join('\n'),
+          html: `<p>A new loan application has been submitted and requires your review.</p>
+<table style="border-collapse:collapse;font-family:sans-serif">
+  <tr><td style="padding:4px 8px;font-weight:bold">Borrower</td><td style="padding:4px 8px">${escapeHtml(borrowerName)}</td></tr>
+  <tr><td style="padding:4px 8px;font-weight:bold">Submitted by</td><td style="padding:4px 8px">${escapeHtml(application.submittedByName || 'Unknown')}</td></tr>
+  <tr><td style="padding:4px 8px;font-weight:bold">Submitted at</td><td style="padding:4px 8px">${escapeHtml(application.submittedAt)}</td></tr>
+</table>
+<p><a href="${escapeHtml(appLink)}">Click here to log in and review the application</a></p>`
+        }).catch((err) => console.error('[EMAIL] Failed to send notification:', err))
+      );
+    }
+  }
+
+  if (Object.keys(newTaskIds).length > 0) {
+    writeTasks(tasks);
+
+    // Persist notification task IDs on the application for idempotency
+    if (appIdx > -1) {
+      apps[appIdx].notificationTaskIds = {
+        ...(apps[appIdx].notificationTaskIds || {}),
+        ...newTaskIds
+      };
+      writeDealerApps(apps);
+    }
+
+    await Promise.all(emailPromises);
+  }
+}
+
+function escapeHtml(str) {
+  return String(str || '')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;');
 }
 
 // ─── Lead helpers ─────────────────────────────────────────────────────────────
@@ -1028,9 +1200,13 @@ app.get('/api/tasks', (req, res) => {
   const userRecord = Object.values(users).find((u) => u.id === req.user.sub);
   const isAdmin = userRecord && userRecord.isAdmin;
 
-  // Admins see all tasks; regular users see tasks for leads they own
+  // Admins see all tasks; regular users see:
+  //   - tasks for leads they own, AND
+  //   - review_application tasks assigned directly to them (leadOwner matches)
   const ownedLeadIds = new Set(leads.filter((l) => l.leadOwner === req.user.sub).map((l) => l.id));
-  const filtered = isAdmin ? tasks : tasks.filter((t) => ownedLeadIds.has(t.leadId));
+  const filtered = isAdmin
+    ? tasks
+    : tasks.filter((t) => ownedLeadIds.has(t.leadId) || t.leadOwner === req.user.sub);
 
   const { completed, leadId } = req.query;
   let result = filtered;
@@ -1952,7 +2128,7 @@ app.get('/api/dealer-applications', (req, res) => {
   res.json({ applications: apps });
 });
 
-app.post('/api/dealer-applications', (req, res) => {
+app.post('/api/dealer-applications', async (req, res) => {
   const apps = readDealerApps();
   const now = new Date().toISOString();
   const application = {
@@ -1964,6 +2140,12 @@ app.post('/api/dealer-applications', (req, res) => {
   };
   apps.unshift(application);
   writeDealerApps(apps);
+
+  // Notify management asynchronously (don't block the response)
+  notifyManagementOfSubmission(application).catch((err) =>
+    console.error('[NOTIFY] Management notification failed:', err)
+  );
+
   res.status(201).json({ application });
 });
 
@@ -2020,9 +2202,28 @@ app.use((err, req, res, next) => {
   res.status(500).json({ error: NODE_ENV === 'production' ? 'Internal server error' : err.message });
 });
 
-app.listen(PORT, () => {
-  console.log(`✅ CRM server running on http://localhost:${PORT}`);
-  console.log(`📋 Environment: ${NODE_ENV}`);
-  console.log(`🔐 Auth: JWT (${JWT_SECRET === 'dev-only-secret-change-in-production' ? 'default secret' : 'custom secret'})`);
-  console.log(`💾 Data: ${LEADS_FILE}`);
-});
+// Only listen when this file is run directly (not when required for testing)
+if (require.main === module) {
+  app.listen(PORT, () => {
+    console.log(`✅ CRM server running on http://localhost:${PORT}`);
+    console.log(`📋 Environment: ${NODE_ENV}`);
+    console.log(`🔐 Auth: JWT (${JWT_SECRET === 'dev-only-secret-change-in-production' ? 'default secret' : 'custom secret'})`);
+    console.log(`💾 Data: ${LEADS_FILE}`);
+  });
+}
+
+// Export for testing
+module.exports = {
+  app,
+  hasManagementAccess,
+  getManagementUsers,
+  notifyManagementOfSubmission,
+  readUsers,
+  readTasks,
+  readDealerApps,
+  writeTasks,
+  writeDealerApps,
+  writeUsers,
+  isAdminUser,
+  MORTGAGE_21ST_URL
+};
