@@ -1,4 +1,4 @@
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import { useDispatch, useSelector } from 'react-redux';
 import { Link } from 'react-router-dom';
 import { RootState } from '../store';
@@ -37,9 +37,13 @@ const STATUS_LABELS: Record<string, string> = {
 export default function DashboardPage() {
   const dispatch = useDispatch();
   const leads = useSelector((state: RootState) => state.leads.leads);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     const fetchLeads = async () => {
+      setLoading(true);
+      setError(null);
       try {
         const res = await leadsAPI.getAll();
         dispatch(setLeads(res.data));
@@ -47,11 +51,25 @@ export default function DashboardPage() {
         if (leads.length === 0) {
           dispatch(setLeads(DEMO_LEADS));
         }
+        setError('Could not reach the server — showing demo data.');
+      } finally {
+        setLoading(false);
       }
     };
     fetchLeads();
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-black flex items-center justify-center">
+        <div className="text-center">
+          <div className="w-10 h-10 border-4 border-exclusive-red border-t-transparent rounded-full animate-spin mx-auto mb-4" />
+          <p className="text-gray-400 text-sm">Loading dashboard…</p>
+        </div>
+      </div>
+    );
+  }
 
   const totalLeads = leads.length;
   const newLeads = leads.filter((l) => l.status === 'new').length;
@@ -74,6 +92,11 @@ export default function DashboardPage() {
 
   return (
     <div className="min-h-screen bg-black pb-20 sm:pb-0">
+      {error && (
+        <div className="bg-yellow-900/40 border-b border-yellow-700/60 text-yellow-300 text-sm px-4 py-2 text-center">
+          {error}
+        </div>
+      )}
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         {/* Header */}
         <div className="mb-6 sm:mb-8 flex items-center justify-between gap-3">

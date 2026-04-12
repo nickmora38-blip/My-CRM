@@ -10,6 +10,7 @@ import TasksPage from './pages/TasksPage';
 import ProfilePage from './pages/ProfilePage';
 import Navbar from './components/Navbar';
 import BottomTabBar from './components/BottomTabBar';
+import ErrorBoundary from './components/ErrorBoundary';
 
 function ProtectedRoute({ children }: { children: React.ReactNode }) {
   const { token } = useSelector((state: RootState) => state.auth);
@@ -21,6 +22,7 @@ export default function App() {
   const { token } = useSelector((state: RootState) => state.auth);
 
   return (
+    <ErrorBoundary>
     <BrowserRouter>
       {token && <Navbar />}
       <Routes>
@@ -70,5 +72,6 @@ export default function App() {
       </Routes>
       {token && <BottomTabBar />}
     </BrowserRouter>
+    </ErrorBoundary>
   );
 }
