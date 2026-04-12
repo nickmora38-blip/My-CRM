@@ -17,6 +17,10 @@ const TEMPLATES_FILE = path.join(DATA_DIR, 'emailTemplates.json');
 const TASKS_FILE = path.join(DATA_DIR, 'tasks.json');
 const CONTACTS_FILE = path.join(DATA_DIR, 'contacts.json');
 const ACTIVE_CUSTOMERS_FILE = path.join(DATA_DIR, 'activeCustomers.json');
+const DEAL_TRACKERS_FILE = path.join(DATA_DIR, 'dealTrackers.json');
+const DEALER_APPS_FILE = path.join(DATA_DIR, 'dealerApplications.json');
+const CLOSING_DOCS_FILE = path.join(DATA_DIR, 'closingDocs.json');
+const SETTINGS_FILE = path.join(DATA_DIR, 'settings.json');
 const DOCUMENTS_DIR = path.join(DATA_DIR, 'documents');
 
 // Warn if running in production with default secret
@@ -247,6 +251,14 @@ function readActiveCustomers() {
 function writeActiveCustomers(customers) {
   writeJson(ACTIVE_CUSTOMERS_FILE, customers);
 }
+function readDealTrackers() { return readJson(DEAL_TRACKERS_FILE, []); }
+function writeDealTrackers(data) { writeJson(DEAL_TRACKERS_FILE, data); }
+function readDealerApps() { return readJson(DEALER_APPS_FILE, []); }
+function writeDealerApps(data) { writeJson(DEALER_APPS_FILE, data); }
+function readClosingDocs() { return readJson(CLOSING_DOCS_FILE, {}); }
+function writeClosingDocs(data) { writeJson(CLOSING_DOCS_FILE, data); }
+function readSettings() { return readJson(SETTINGS_FILE, { calcUrl: 'https://www.mortgagecalculator.org/' }); }
+function writeSettings(data) { writeJson(SETTINGS_FILE, data); }
 function getCustomerDocDir(customerId) {
   const dir = path.join(DOCUMENTS_DIR, customerId);
   if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
@@ -573,7 +585,8 @@ app.get('/api/auth/me', authMiddleware, (req, res) => {
   const userRecord = Object.values(users).find((u) => u.id === req.user.sub);
   const isAdmin = isAdminUser(userRecord);
   const role = userRecord ? (userRecord.role || (isAdmin ? 'admin' : 'phc')) : 'phc';
-  res.json({ user: { ...req.user, isAdmin, role } });
+  const pagePermissions = userRecord ? (userRecord.pagePermissions || null) : null;
+  res.json({ user: { ...req.user, isAdmin, role, pagePermissions } });
 });
 
 // ─── Leads routes ─────────────────────────────────────────────────────────────
@@ -1116,6 +1129,20 @@ app.put('/api/admin/users/:id', (req, res) => {
   writeUsers(users);
 
   res.json({ user: { id: users[email].id, email, name: users[email].name, isAdmin: users[email].isAdmin, role: users[email].role, active: users[email].active } });
+});
+
+// PUT /api/admin/users/:id/permissions — save page permissions (admin only)
+app.put('/api/admin/users/:id/permissions', (req, res) => {
+  const users = readUsers();
+  const email = Object.keys(users).find((k) => users[k].id === req.params.id);
+  if (!email) return res.status(404).json({ error: 'User not found' });
+  const { pagePermissions } = req.body;
+  if (typeof pagePermissions !== 'object' || pagePermissions === null) {
+    return res.status(400).json({ error: 'pagePermissions must be an object' });
+  }
+  users[email].pagePermissions = pagePermissions;
+  writeUsers(users);
+  res.json({ user: { id: users[email].id, email, pagePermissions } });
 });
 
 // POST /api/admin/approve-duplicate — admin handles duplicate lead entry
@@ -1843,6 +1870,131 @@ app.get('/api/pipeline/monthly', authMiddleware, (req, res) => {
       total: Object.values(monthMap[month]).reduce((s, n) => s + n, 0)
     }))
   });
+});
+
+// ─── Deal Trackers ────────────────────────────────────────────────────────────
+
+app.use('/api/deal-trackers', authMiddleware);
+
+app.get('/api/deal-trackers', (req, res) => {
+  const trackers = readDealTrackers();
+  res.json({ trackers });
+});
+
+app.post('/api/deal-trackers', (req, res) => {
+  const trackers = readDealTrackers();
+  const now = new Date().toISOString();
+  const tracker = {
+    id: `dt_${crypto.randomUUID()}`,
+    createdBy: req.user.sub,
+    createdByName: req.user.name,
+    createdAt: now,
+    updatedAt: now,
+    master: req.body.master || {},
+    bidRequest: req.body.bidRequest || {},
+    cocs: req.body.cocs || {},
+    commissionPricing: req.body.commissionPricing || {},
+    estimateSheet: req.body.estimateSheet || {}
+  };
+  trackers.unshift(tracker);
+  writeDealTrackers(trackers);
+  res.status(201).json({ tracker });
+});
+
+app.get('/api/deal-trackers/:id', (req, res) => {
+  const trackers = readDealTrackers();
+  const tracker = trackers.find((t) => t.id === req.params.id);
+  if (!tracker) return res.status(404).json({ error: 'Deal tracker not found' });
+  res.json({ tracker });
+});
+
+app.put('/api/deal-trackers/:id', (req, res) => {
+  const trackers = readDealTrackers();
+  const idx = trackers.findIndex((t) => t.id === req.params.id);
+  if (idx === -1) return res.status(404).json({ error: 'Deal tracker not found' });
+  trackers[idx] = {
+    ...trackers[idx],
+    master: req.body.master !== undefined ? req.body.master : trackers[idx].master,
+    bidRequest: req.body.bidRequest !== undefined ? req.body.bidRequest : trackers[idx].bidRequest,
+    cocs: req.body.cocs !== undefined ? req.body.cocs : trackers[idx].cocs,
+    commissionPricing: req.body.commissionPricing !== undefined ? req.body.commissionPricing : trackers[idx].commissionPricing,
+    estimateSheet: req.body.estimateSheet !== undefined ? req.body.estimateSheet : trackers[idx].estimateSheet,
+    updatedAt: new Date().toISOString()
+  };
+  writeDealTrackers(trackers);
+  res.json({ tracker: trackers[idx] });
+});
+
+app.delete('/api/deal-trackers/:id', (req, res) => {
+  const users = readUsers();
+  const userRecord = Object.values(users).find((u) => u.id === req.user.sub);
+  const isAdmin = isAdminUser(userRecord);
+  const trackers = readDealTrackers();
+  const idx = trackers.findIndex((t) => t.id === req.params.id);
+  if (idx === -1) return res.status(404).json({ error: 'Deal tracker not found' });
+  if (!isAdmin && trackers[idx].createdBy !== req.user.sub) {
+    return res.status(403).json({ error: 'Only the creator or admin can delete this record' });
+  }
+  trackers.splice(idx, 1);
+  writeDealTrackers(trackers);
+  res.json({ success: true });
+});
+
+// ─── Dealer Applications ─────────────────────────────────────────────────────
+
+app.use('/api/dealer-applications', authMiddleware);
+
+app.get('/api/dealer-applications', (req, res) => {
+  const users = readUsers();
+  const userRecord = Object.values(users).find((u) => u.id === req.user.sub);
+  if (!isAdminUser(userRecord)) return res.status(403).json({ error: 'Admin access required' });
+  const apps = readDealerApps();
+  res.json({ applications: apps });
+});
+
+app.post('/api/dealer-applications', (req, res) => {
+  const apps = readDealerApps();
+  const now = new Date().toISOString();
+  const application = {
+    id: `app_${crypto.randomUUID()}`,
+    submittedBy: req.user.sub,
+    submittedByName: req.user.name,
+    submittedAt: now,
+    ...req.body
+  };
+  apps.unshift(application);
+  writeDealerApps(apps);
+  res.status(201).json({ application });
+});
+
+// ─── Closing Docs ─────────────────────────────────────────────────────────────
+
+app.use('/api/closing-docs', authMiddleware);
+
+app.get('/api/closing-docs/:customerId', (req, res) => {
+  const docs = readClosingDocs();
+  res.json({ closingDocs: docs[req.params.customerId] || {} });
+});
+
+app.put('/api/closing-docs/:customerId', (req, res) => {
+  const docs = readClosingDocs();
+  docs[req.params.customerId] = req.body.checklist || {};
+  writeClosingDocs(docs);
+  res.json({ closingDocs: docs[req.params.customerId] });
+});
+
+// ─── Settings ─────────────────────────────────────────────────────────────────
+
+app.get('/api/settings', authMiddleware, (req, res) => {
+  res.json({ settings: readSettings() });
+});
+
+app.put('/api/settings', authMiddleware, adminMiddleware, (req, res) => {
+  const current = readSettings();
+  const updated = { ...current };
+  if (req.body.calcUrl !== undefined) updated.calcUrl = String(req.body.calcUrl || '').trim();
+  writeSettings(updated);
+  res.json({ settings: updated });
 });
 
 // ─── Health check ─────────────────────────────────────────────────────────────

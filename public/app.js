@@ -33,8 +33,8 @@ const state = {
   filters: { search: '', status: '', source: '', response: '' },
   editingLeadId: null,
   openStatusDropdown: null,
-  pendingLeadPayload: null,   // held during duplicate check
-  pendingDuplicates: [],      // duplicates found during check
+  pendingLeadPayload: null,
+  pendingDuplicates: [],
   emailTargetLeadId: null,
   emailTargetType: null,
   editingTemplateId: null,
@@ -50,7 +50,16 @@ const state = {
   pipelineActiveMonth: null,
   pipelineFilterStatus: '',
   pipelineFilterLender: '',
-  pipelineMonthsData: []
+  pipelineMonthsData: [],
+  dealTrackers: [],
+  editingDealTrackerId: null,
+  activeDtTab: 'master',
+  activeReportTab: 'leads-by-status',
+  dealerApplications: [],
+  closingDocs: {},
+  settings: { calcUrl: 'https://www.mortgagecalculator.org/' },
+  permissionsUserId: null,
+  leadsTabVisible: false
 };
 
 const els = {
@@ -193,7 +202,60 @@ const els = {
   docCategory: document.getElementById('doc-category'),
   docFileInput: document.getElementById('doc-file-input'),
   docUploadCancelBtn: document.getElementById('doc-upload-cancel-btn'),
-  docUploadSaveBtn: document.getElementById('doc-upload-save-btn')
+  docUploadSaveBtn: document.getElementById('doc-upload-save-btn'),
+  // New feature elements
+  leadsTabBtn: document.getElementById('leads-tab-btn'),
+  reportsPanelEl: document.getElementById('reports-panel'),
+  reportsCloseBtn: document.getElementById('reports-close-btn'),
+  reportsTabBar: document.getElementById('reports-tab-bar'),
+  reportsContent: document.getElementById('reports-content'),
+  dealTrackerBtn: document.getElementById('deal-tracker-btn'),
+  dealTrackerPanel: document.getElementById('deal-tracker-panel'),
+  dealTrackerCloseBtn: document.getElementById('deal-tracker-close-btn'),
+  newDealTrackerBtn: document.getElementById('new-deal-tracker-btn'),
+  dealTrackerList: document.getElementById('deal-tracker-list'),
+  closingDocsBtn: document.getElementById('closing-docs-btn'),
+  closingDocsPanel: document.getElementById('closing-docs-panel'),
+  closingDocsCloseBtn: document.getElementById('closing-docs-close-btn'),
+  closingDocsCustomerSelect: document.getElementById('closing-docs-customer-select'),
+  closingDocsContent: document.getElementById('closing-docs-content'),
+  dealerAppBtn: document.getElementById('dealer-app-btn'),
+  abCalcBtn: document.getElementById('ab-calc-btn'),
+  settingsBtn: document.getElementById('settings-btn'),
+  // Deal tracker modal
+  dealTrackerModal: document.getElementById('deal-tracker-modal'),
+  dealTrackerModalTitle: document.getElementById('deal-tracker-modal-title'),
+  dtTabBar: document.getElementById('dt-tab-bar'),
+  dtTabContent: document.getElementById('dt-tab-content'),
+  dtCloseBtn: document.getElementById('dt-close-btn'),
+  dtCancelBtn: document.getElementById('dt-cancel-btn'),
+  dtSaveBtn: document.getElementById('dt-save-btn'),
+  dtPrintBtn: document.getElementById('dt-print-btn'),
+  // Dealer app modal
+  dealerAppModal: document.getElementById('dealer-app-modal'),
+  dealerAppFormContent: document.getElementById('dealer-app-form-content'),
+  dealerAppCancelBtn: document.getElementById('dealer-app-cancel-btn'),
+  dealerAppSubmitBtn: document.getElementById('dealer-app-submit-btn'),
+  // Dealer app list modal
+  dealerAppListModal: document.getElementById('dealer-app-list-modal'),
+  dealerAppListContent: document.getElementById('dealer-app-list-content'),
+  dealerAppListCloseBtn: document.getElementById('dealer-app-list-close-btn'),
+  // AB Calc modal
+  abCalcModal: document.getElementById('ab-calc-modal'),
+  abCalcIframe: document.getElementById('ab-calc-iframe'),
+  abCalcOpenTabBtn: document.getElementById('ab-calc-open-tab-btn'),
+  abCalcCloseBtn: document.getElementById('ab-calc-close-btn'),
+  // Settings modal
+  settingsModal: document.getElementById('settings-modal'),
+  settingsCalcUrl: document.getElementById('settings-calc-url'),
+  settingsCancelBtn: document.getElementById('settings-cancel-btn'),
+  settingsSaveBtn: document.getElementById('settings-save-btn'),
+  // Permissions modal
+  permissionsModal: document.getElementById('permissions-modal'),
+  permissionsUserName: document.getElementById('permissions-user-name'),
+  permissionsCheckboxes: document.getElementById('permissions-checkboxes'),
+  permissionsCancelBtn: document.getElementById('permissions-cancel-btn'),
+  permissionsSaveBtn: document.getElementById('permissions-save-btn')
 };
 
 // ─── API helper ───────────────────────────────────────────────────────────────
@@ -216,6 +278,14 @@ function currency(value) {
 
 function currentUserIsAdmin() {
   return !!(state.user && (state.user.isAdmin || state.user.role === 'admin'));
+}
+
+function canAccessPage(page) {
+  if (!state.user) return false;
+  if (currentUserIsAdmin()) return true;
+  const perms = state.user.pagePermissions;
+  if (!perms) return true;
+  return perms[page] !== false;
 }
 
 function isDetailRoute() {
@@ -707,7 +777,7 @@ function renderLeadDetail(lead) {
 
 function renderListPage() {
   const rows = filteredLeads();
-  els.listView.classList.remove('hidden');
+  if (!state.leadsTabVisible) els.listView.classList.remove('hidden');
   els.detailView.classList.add('hidden');
   els.listToggle.classList.toggle('active', state.view === 'list');
   els.boardToggle.classList.toggle('active', state.view === 'board');
@@ -745,12 +815,33 @@ function render() {
   els.userLine.textContent = state.user
     ? `${state.user.name} (${state.user.email}) — ${roleLabel}`
     : '';
-  // Show admin-only buttons
   if (els.usersBtn) els.usersBtn.classList.toggle('hidden', !isAdmin);
-  // Hide "New Contact" button from non-admins (contacts must originate from leads)
   if (els.newContactBtn) els.newContactBtn.classList.toggle('hidden', !isAdmin);
+  if (els.settingsBtn) els.settingsBtn.classList.toggle('hidden', !isAdmin);
+  updateToolbarVisibility();
   if (isDetailRoute()) renderDetailPage();
   else renderListPage();
+}
+
+function updateToolbarVisibility() {
+  const btnMap = [
+    { btn: els.contactsBtn, page: 'contacts' },
+    { btn: els.activeCustomersBtn, page: 'active-customers' },
+    { btn: els.pipelineBtn, page: 'pipeline' },
+    { btn: els.exportBtn, page: 'reports' },
+    { btn: els.dealTrackerBtn, page: 'deal-tracker' },
+    { btn: els.closingDocsBtn, page: 'closing-docs' },
+    { btn: els.dealerAppBtn, page: 'dealer-app' },
+    { btn: els.tasksBtn, page: 'tasks' },
+    { btn: els.templatesBtn, page: 'templates' }
+  ];
+  if (currentUserIsAdmin()) {
+    btnMap.forEach(({ btn }) => { if (btn) btn.classList.remove('hidden'); });
+    return;
+  }
+  btnMap.forEach(({ btn, page }) => {
+    if (btn) btn.classList.toggle('hidden', !canAccessPage(page));
+  });
 }
 
 // ─── Tasks panel ──────────────────────────────────────────────────────────────
@@ -855,10 +946,15 @@ function renderUsersPanel() {
       </div>
       <div class="toolbar-actions" style="gap:6px">
         <button type="button" data-edit-user="${escHtml(user.id)}" style="font-size:0.8rem">✏️ Edit</button>
+        <button type="button" data-permissions-user="${escHtml(user.id)}" style="font-size:0.8rem">⚙️ Permissions</button>
         ${!isSelf ? `<button type="button" data-del-user="${escHtml(user.id)}" class="danger-btn" style="font-size:0.8rem">🗑️ Delete</button>` : ''}
       </div>
     `;
     row.querySelector('[data-edit-user]').addEventListener('click', () => openUserModal(user));
+    const permBtn = row.querySelector('[data-permissions-user]');
+    if (permBtn) {
+      permBtn.addEventListener('click', () => openPermissionsModal(user));
+    }
     const delBtn = row.querySelector('[data-del-user]');
     if (delBtn) {
       delBtn.addEventListener('click', async () => {
@@ -873,6 +969,180 @@ function renderUsersPanel() {
       });
     }
     els.usersList.appendChild(row);
+  });
+}
+
+// ─── Reports panel ────────────────────────────────────────────────────────────
+
+function renderReportsPanel() {
+  const tab = state.activeReportTab;
+  els.reportsTabBar.querySelectorAll('.pipe-tab').forEach((t) => {
+    t.classList.toggle('active', t.dataset.report === tab);
+  });
+
+  if (tab === 'leads-by-status') renderLeadsByStatusReport();
+  else if (tab === 'contacts-by-status') renderContactsByStatusReport();
+  else if (tab === 'pipeline-crm') renderPipelineCrmReport();
+}
+
+function exportTableToCsv(headers, rows, filename) {
+  const esc = (v) => `"${String(v || '').replace(/"/g, '""')}"`;
+  const csv = [headers.join(','), ...rows.map((r) => r.map(esc).join(','))].join('\n');
+  const blob = new Blob([csv], { type: 'text/csv' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = filename;
+  a.click();
+  URL.revokeObjectURL(url);
+}
+
+function renderLeadsByStatusReport() {
+  const stages = ['New Lead', 'Hot Lead', 'Appointment Set', 'Active', 'Dead', 'Junk'];
+  const grouped = {};
+  stages.forEach((s) => { grouped[s] = []; });
+  state.leads.forEach((l) => {
+    const s = l.status || 'New Lead';
+    if (!grouped[s]) grouped[s] = [];
+    grouped[s].push(l);
+  });
+
+  const rows = stages.map((s) => {
+    const leads = grouped[s] || [];
+    return `<tr>
+      <td><strong>${escHtml(s)}</strong></td>
+      <td style="text-align:center">${leads.length}</td>
+      <td style="font-size:0.8rem">${leads.map((l) => escHtml(`${l.firstName} ${l.lastName}`)).join(', ') || '<span class="muted">—</span>'}</td>
+    </tr>`;
+  }).join('');
+
+  els.reportsContent.innerHTML = `
+    <div style="padding:12px 0">
+      <div style="display:flex;justify-content:flex-end;margin-bottom:8px">
+        <button type="button" id="leads-status-csv-btn" style="font-size:0.85rem">⬇️ Export CSV</button>
+      </div>
+      <table class="pipeline-report-table">
+        <thead><tr><th>Stage</th><th>Count</th><th>Names</th></tr></thead>
+        <tbody>${rows}</tbody>
+      </table>
+    </div>
+  `;
+  els.reportsContent.querySelector('#leads-status-csv-btn').addEventListener('click', () => {
+    const headers = ['Stage', 'Count', 'Names'];
+    const csvRows = stages.map((s) => {
+      const leads = grouped[s] || [];
+      return [s, leads.length, leads.map((l) => `${l.firstName} ${l.lastName}`).join('; ')];
+    });
+    exportTableToCsv(headers, csvRows, 'leads-by-status.csv');
+  });
+}
+
+function renderContactsByStatusReport() {
+  const stages = ['App Submitted', 'Approve', 'In Process', 'Conditions Cleared', 'Closing Requested', 'Closed', 'Pending Delivery', 'Delivered Pending Construction', 'Funded', 'Complete', 'Dead', 'DNQ'];
+  const grouped = {};
+  stages.forEach((s) => { grouped[s] = []; });
+  state.contacts.forEach((c) => {
+    const s = c.pipelineStatus || 'App Submitted';
+    if (!grouped[s]) grouped[s] = [];
+    grouped[s].push(c);
+  });
+
+  const rows = stages.map((s) => {
+    const contacts = grouped[s] || [];
+    return `<tr>
+      <td><strong>${escHtml(s)}</strong></td>
+      <td style="text-align:center">${contacts.length}</td>
+      <td style="font-size:0.8rem">${contacts.map((c) => escHtml(`${c.firstName} ${c.lastName}`)).join(', ') || '<span class="muted">—</span>'}</td>
+    </tr>`;
+  }).join('');
+
+  els.reportsContent.innerHTML = `
+    <div style="padding:12px 0">
+      <div style="display:flex;justify-content:flex-end;margin-bottom:8px">
+        <button type="button" id="contacts-status-csv-btn" style="font-size:0.85rem">⬇️ Export CSV</button>
+      </div>
+      <table class="pipeline-report-table">
+        <thead><tr><th>Status</th><th>Count</th><th>Names</th></tr></thead>
+        <tbody>${rows}</tbody>
+      </table>
+    </div>
+  `;
+  els.reportsContent.querySelector('#contacts-status-csv-btn').addEventListener('click', () => {
+    const headers = ['Status', 'Count', 'Names'];
+    const csvRows = stages.map((s) => {
+      const contacts = grouped[s] || [];
+      return [s, contacts.length, contacts.map((c) => `${c.firstName} ${c.lastName}`).join('; ')];
+    });
+    exportTableToCsv(headers, csvRows, 'contacts-by-status.csv');
+  });
+}
+
+function renderPipelineCrmReport() {
+  const customers = state.activeCustomers;
+
+  const headers = ['PHC', 'Purchaser', 'L/H or Chattel', 'Home', 'Sales Price', 'Type', 'Order/Stock', 'Factory', 'Modular Y/N', 'Pay Stubs', 'W2s', 'VOD', 'VOE/VOR', 'Bids', 'Lender', 'Deed/Land Contract', 'Site Inspection', 'Survey', 'Appraisal', 'Title', '911 Address', 'Spec Sheet', 'C.O.C.S.', 'Conditions Met', 'Type SW/DW/TW', 'PO#', 'Serial#', 'Title Close', 'Warranty Close', 'Offline', 'Delivery', 'Comments', 'EGP'];
+
+  const ck = (val) => val ? '✓' : '—';
+
+  const rows = customers.map((c) => {
+    const cl = c.checklist || {};
+    return `<tr>
+      <td>${escHtml(c.ownerName || '-')}</td>
+      <td>${escHtml(`${c.firstName} ${c.lastName}`)}</td>
+      <td>${escHtml(c.loanType || '-')}</td>
+      <td>${escHtml(c.homeName || '-')}</td>
+      <td>${c.estimatedValue ? currency(c.estimatedValue) : '-'}</td>
+      <td>${escHtml(cl.type || '-')}</td>
+      <td>${escHtml(cl.orderStock || '-')}</td>
+      <td>${escHtml(cl.factory || '-')}</td>
+      <td>${escHtml(cl.modular || '-')}</td>
+      <td style="text-align:center">${ck(cl.payStubs)}</td>
+      <td style="text-align:center">${ck(cl.w2s)}</td>
+      <td style="text-align:center">${ck(cl.vod)}</td>
+      <td style="text-align:center">${ck(cl.voeVor)}</td>
+      <td style="text-align:center">${ck(cl.bids)}</td>
+      <td>${escHtml(c.lender || '-')}</td>
+      <td style="text-align:center">${ck(cl.deedLandContract)}</td>
+      <td style="text-align:center">${ck(cl.siteInspection)}</td>
+      <td style="text-align:center">${ck(cl.survey)}</td>
+      <td style="text-align:center">${ck(cl.appraisal)}</td>
+      <td style="text-align:center">${ck(cl.title)}</td>
+      <td style="text-align:center">${ck(cl.address911)}</td>
+      <td style="text-align:center">${ck(cl.specSheet)}</td>
+      <td style="text-align:center">${ck(cl.cocs)}</td>
+      <td style="text-align:center">${ck(cl.conditionsMet)}</td>
+      <td>${escHtml(cl.swDwTw || '-')}</td>
+      <td>${escHtml(c.poNumber || '-')}</td>
+      <td>${escHtml(c.serialNumber || '-')}</td>
+      <td>—</td>
+      <td>—</td>
+      <td>—</td>
+      <td>—</td>
+      <td>${escHtml(c.notes ? c.notes.slice(0, 40) : '-')}</td>
+      <td>${c.estGrossProfit ? currency(c.estGrossProfit) : '-'}</td>
+    </tr>`;
+  }).join('');
+
+  els.reportsContent.innerHTML = `
+    <div style="padding:12px 0">
+      <div style="display:flex;justify-content:flex-end;margin-bottom:8px">
+        <button type="button" id="pipeline-crm-csv-btn" style="font-size:0.85rem">⬇️ Export CSV</button>
+      </div>
+      <div style="overflow-x:auto">
+        <table class="pipeline-report-table" style="font-size:0.75rem">
+          <thead><tr>${headers.map((h) => `<th>${escHtml(h)}</th>`).join('')}</tr></thead>
+          <tbody>${rows || '<tr><td colspan="34" class="muted" style="padding:12px;text-align:center">No active customers yet.</td></tr>'}</tbody>
+        </table>
+      </div>
+    </div>
+  `;
+  els.reportsContent.querySelector('#pipeline-crm-csv-btn').addEventListener('click', () => {
+    const csvRows = customers.map((c) => {
+      const cl = c.checklist || {};
+      const b = (v) => v ? 'Y' : 'N';
+      return [c.ownerName || '', `${c.firstName} ${c.lastName}`, c.loanType || '', c.homeName || '', c.estimatedValue || 0, cl.type || '', cl.orderStock || '', cl.factory || '', cl.modular || '', b(cl.payStubs), b(cl.w2s), b(cl.vod), b(cl.voeVor), b(cl.bids), c.lender || '', b(cl.deedLandContract), b(cl.siteInspection), b(cl.survey), b(cl.appraisal), b(cl.title), b(cl.address911), b(cl.specSheet), b(cl.cocs), b(cl.conditionsMet), cl.swDwTw || '', c.poNumber || '', c.serialNumber || '', '', '', '', '', c.notes || '', c.estGrossProfit || 0];
+    });
+    exportTableToCsv(headers, csvRows, 'pipeline-crm-report.csv');
   });
 }
 
@@ -932,6 +1202,475 @@ els.userSaveBtn.addEventListener('click', async () => {
       alert(err.message);
     }
   }
+});
+
+// ─── Deal Tracker panel ───────────────────────────────────────────────────────
+
+function renderDealTrackerPanel() {
+  els.dealTrackerList.innerHTML = '';
+  if (state.dealTrackers.length === 0) {
+    els.dealTrackerList.innerHTML = '<p class="muted" style="padding:12px">No deal trackers yet. Click + New Deal Tracker to create one.</p>';
+    return;
+  }
+  state.dealTrackers.forEach((dt) => {
+    const row = document.createElement('div');
+    row.className = 'task-row';
+    const purchaser = dt.master && dt.master.purchaser ? dt.master.purchaser : '(No purchaser)';
+    row.innerHTML = `
+      <div class="task-info" style="flex:1">
+        <strong>${escHtml(purchaser)}</strong>
+        <p class="muted" style="font-size:0.85rem;margin:4px 0 0">Created by ${escHtml(dt.createdByName || '-')} on ${new Date(dt.createdAt).toLocaleDateString()}</p>
+      </div>
+      <div class="toolbar-actions" style="gap:6px">
+        <button type="button" data-view-dt="${escHtml(dt.id)}" style="font-size:0.8rem">View/Edit</button>
+        <button type="button" data-del-dt="${escHtml(dt.id)}" class="danger-btn" style="font-size:0.8rem">🗑️</button>
+      </div>
+    `;
+    row.querySelector('[data-view-dt]').addEventListener('click', () => openDealTrackerModal(dt.id));
+    row.querySelector('[data-del-dt]').addEventListener('click', async () => {
+      if (!window.confirm('Delete this deal tracker record?')) return;
+      try {
+        await api(`/api/deal-trackers/${dt.id}`, { method: 'DELETE' });
+        await loadDealTrackers();
+        renderDealTrackerPanel();
+      } catch (err) { alert(err.message); }
+    });
+    els.dealTrackerList.appendChild(row);
+  });
+}
+
+const DT_TABS = {
+  master: {
+    label: 'Master Deal Tracker',
+    fields: [
+      ['purchaser', 'Purchaser', 'text'],
+      ['coBorrower', 'Co-Borrower', 'text'],
+      ['phc', 'PHC', 'text'],
+      ['date', 'Date', 'date'],
+      ['homeDescription', 'Home Description', 'text'],
+      ['model', 'Model', 'text'],
+      ['serialNumber', 'Serial#', 'text'],
+      ['hudNumber', 'HUD#', 'text'],
+      ['salesPrice', 'Sales Price', 'number'],
+      ['downPayment', 'Down Payment', 'number'],
+      ['balanceDue', 'Balance Due', 'number'],
+      ['lotLandInfo', 'Lot/Land Info', 'text'],
+      ['lender', 'Lender', 'text'],
+      ['loanAmount', 'Loan Amount', 'number'],
+      ['closingDate', 'Closing Date', 'date'],
+      ['deliveryDate', 'Delivery Date', 'date'],
+      ['notes', 'Notes', 'textarea']
+    ]
+  },
+  bid: {
+    label: 'Bid Request',
+    fields: [
+      ['purchaser', 'Purchaser', 'text'],
+      ['date', 'Date', 'date'],
+      ['homeDescription', 'Home Description', 'text'],
+      ['siteAddress', 'Site Address', 'text'],
+      ['lotClearing', 'Lot Clearing', 'number'],
+      ['footer', 'Footer', 'number'],
+      ['utilities', 'Utilities', 'number'],
+      ['driveway', 'Driveway', 'number'],
+      ['acHeat', 'AC/Heat', 'number'],
+      ['skirt', 'Skirt', 'number'],
+      ['stepsDeck', 'Steps/Deck', 'number'],
+      ['otherItems', 'Other Items', 'number'],
+      ['totalBids', 'Total Bids', 'number'],
+      ['contractorNotes', 'Contractor Notes', 'textarea']
+    ]
+  },
+  cocs: {
+    label: 'C.O.C.S.',
+    fields: [
+      ['purchaser', 'Purchaser', 'text'],
+      ['date', 'Date', 'date'],
+      ['homeInfo', 'Home Info', 'text'],
+      ['installationAddress', 'Installation Address', 'text'],
+      ['county', 'County', 'text'],
+      ['state', 'State', 'text'],
+      ['foundationType', 'Foundation Type', 'text'],
+      ['siteInspectionDate', 'Site Inspection Date', 'date'],
+      ['sitePrepComplete', 'Site Prep Complete', 'text'],
+      ['gradeLevel', 'Grade/Level', 'text'],
+      ['utilityConnections', 'Utility Connections', 'text'],
+      ['notes', 'Notes', 'textarea']
+    ]
+  },
+  commission: {
+    label: 'Commission Pricing',
+    fields: [
+      ['purchaser', 'Purchaser', 'text'],
+      ['date', 'Date', 'date'],
+      ['salesPrice', 'Sales Price', 'number'],
+      ['baseCost', 'Base Cost', 'number'],
+      ['invoicePrice', 'Invoice Price', 'number'],
+      ['grossProfit', 'Gross Profit', 'number'],
+      ['commissionRate', 'Commission Rate (%)', 'number'],
+      ['commissionAmount', 'Commission Amount', 'number'],
+      ['adjNotes', 'Adj Notes', 'textarea'],
+      ['finalCommission', 'Final Commission', 'number']
+    ]
+  },
+  estimate: {
+    label: 'Estimate Sheet',
+    fields: [
+      ['purchaser', 'Purchaser', 'text'],
+      ['date', 'Date', 'date'],
+      ['homePrice', 'Home Price', 'number'],
+      ['sitePrep', 'Site Prep', 'number'],
+      ['foundation', 'Foundation', 'number'],
+      ['utilities', 'Utilities', 'number'],
+      ['deliveryInstall', 'Delivery/Install', 'number'],
+      ['stepsDeck', 'Steps/Deck', 'number'],
+      ['hvac', 'HVAC', 'number'],
+      ['skirt', 'Skirt', 'number'],
+      ['misc', 'Misc', 'number'],
+      ['totalEstimate', 'Total Estimate', 'number'],
+      ['notes', 'Notes', 'textarea']
+    ]
+  }
+};
+
+function openDealTrackerModal(dtId = null, prefillPurchaser = '') {
+  state.editingDealTrackerId = dtId;
+  state.activeDtTab = 'master';
+  const existing = dtId ? state.dealTrackers.find((dt) => dt.id === dtId) : null;
+  els.dealTrackerModalTitle.textContent = existing ? 'Edit Deal Tracker' : 'New Deal Tracker';
+  renderDtTabBar();
+  renderDtTabContent(existing, prefillPurchaser);
+  els.dealTrackerModal.showModal();
+}
+
+function renderDtTabBar() {
+  els.dtTabBar.querySelectorAll('.pipe-tab').forEach((tab) => {
+    tab.classList.toggle('active', tab.dataset.dtTab === state.activeDtTab);
+  });
+}
+
+function renderDtTabContent(existing, prefillPurchaser = '') {
+  const tab = state.activeDtTab;
+  const tabKey = tab === 'bid' ? 'bidRequest' : tab === 'commission' ? 'commissionPricing' : tab === 'estimate' ? 'estimateSheet' : tab;
+  const data = existing ? (existing[tabKey] || {}) : {};
+  const tabDef = DT_TABS[tab];
+
+  const fieldsHtml = tabDef.fields.map(([key, label, type]) => {
+    const val = data[key] !== undefined ? data[key] : (key === 'purchaser' && !existing ? prefillPurchaser : '');
+    if (type === 'textarea') {
+      return `<label class="span-2">${escHtml(label)} <textarea data-dt-field="${escHtml(key)}" rows="3" style="width:100%">${escHtml(String(val || ''))}</textarea></label>`;
+    }
+    return `<label>${escHtml(label)} <input type="${escHtml(type)}" data-dt-field="${escHtml(key)}" value="${escHtml(String(val || ''))}" style="width:100%" /></label>`;
+  }).join('');
+
+  els.dtTabContent.innerHTML = `<div class="grid two-col" style="gap:10px">${fieldsHtml}</div>`;
+}
+
+function collectDtTabData() {
+  const result = {};
+  els.dtTabContent.querySelectorAll('[data-dt-field]').forEach((el) => {
+    result[el.dataset.dtField] = el.value;
+  });
+  return result;
+}
+
+els.dtTabBar.querySelectorAll('.pipe-tab').forEach((tab) => {
+  tab.addEventListener('click', () => {
+    state.activeDtTab = tab.dataset.dtTab;
+    renderDtTabBar();
+    const existing = state.editingDealTrackerId ? state.dealTrackers.find((dt) => dt.id === state.editingDealTrackerId) : null;
+    renderDtTabContent(existing);
+  });
+});
+
+els.dtCloseBtn.addEventListener('click', () => els.dealTrackerModal.close());
+els.dtCancelBtn.addEventListener('click', () => els.dealTrackerModal.close());
+els.dtPrintBtn.addEventListener('click', () => window.print());
+
+els.dtSaveBtn.addEventListener('click', async () => {
+  const currentTabData = collectDtTabData();
+  const tab = state.activeDtTab;
+  const tabKey = tab === 'bid' ? 'bidRequest' : tab === 'commission' ? 'commissionPricing' : tab === 'estimate' ? 'estimateSheet' : tab;
+
+  try {
+    if (state.editingDealTrackerId) {
+      const existing = state.dealTrackers.find((dt) => dt.id === state.editingDealTrackerId);
+      const patch = { [tabKey]: { ...(existing ? existing[tabKey] || {} : {}), ...currentTabData } };
+      const result = await api(`/api/deal-trackers/${state.editingDealTrackerId}`, { method: 'PUT', body: JSON.stringify(patch) });
+      const idx = state.dealTrackers.findIndex((dt) => dt.id === state.editingDealTrackerId);
+      if (idx > -1) state.dealTrackers[idx] = result.tracker;
+    } else {
+      const payload = { [tabKey]: currentTabData };
+      const result = await api('/api/deal-trackers', { method: 'POST', body: JSON.stringify(payload) });
+      state.dealTrackers.unshift(result.tracker);
+      state.editingDealTrackerId = result.tracker.id;
+    }
+    renderDealTrackerPanel();
+    alert('Deal tracker saved!');
+  } catch (err) { alert(err.message); }
+});
+
+// ─── Closing Docs panel ───────────────────────────────────────────────────────
+
+const CLOSING_DOC_CATEGORIES = {
+  'Loan Documents': ['Loan Application', 'Credit Report Authorization', 'Income Verification', 'Employment Verification', 'Bank Statements', 'VOD (Verification of Deposit)', 'VOE/VOR'],
+  'Property Documents': ['Deed / Land Contract', 'Site Inspection', 'Survey', 'Appraisal', 'Title Search', '911 Address Verification', 'Spec Sheet'],
+  'Home Documents': ['Purchase Agreement', 'Home Invoice', 'COCS Certificate', 'Warranty Info', 'Serial Numbers', 'HUD Certification', "Manufacturer's Statement of Origin"],
+  'Closing Items': ['Closing Disclosure', 'Settlement Statement', 'Title Insurance', 'Hazard Insurance', 'Survey Review', 'Final Inspection', 'Keys/Manuals']
+};
+
+function renderClosingDocsPanel() {
+  const select = els.closingDocsCustomerSelect;
+  const currentVal = select.value;
+  select.innerHTML = '<option value="">— Select Active Customer —</option>';
+  state.activeCustomers.forEach((c) => {
+    const opt = document.createElement('option');
+    opt.value = c.id;
+    opt.textContent = `${c.firstName} ${c.lastName}`;
+    select.appendChild(opt);
+  });
+  if (currentVal) select.value = currentVal;
+
+  const customerId = select.value;
+  if (!customerId) {
+    els.closingDocsContent.innerHTML = '<p class="muted" style="padding:12px">Select an active customer above to view/edit their closing documents checklist.</p>';
+    return;
+  }
+  const checklist = state.closingDocs[customerId] || {};
+  let html = '';
+  Object.entries(CLOSING_DOC_CATEGORIES).forEach(([category, items]) => {
+    const itemsHtml = items.map((item) => {
+      const key = item.replace(/[^a-zA-Z0-9]/g, '_');
+      return `<label class="check-label"><input type="checkbox" data-doc-item="${escHtml(key)}" ${checklist[key] ? 'checked' : ''} /> ${escHtml(item)}</label>`;
+    }).join('');
+    html += `<article class="card" style="margin-bottom:12px">
+      <h4>${escHtml(category)}</h4>
+      <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:6px">${itemsHtml}</div>
+    </article>`;
+  });
+
+  els.closingDocsContent.innerHTML = `
+    <div style="padding:8px 0">
+      ${html}
+      <button type="button" id="save-closing-docs-btn" class="primary" style="margin-top:8px">Save Checklist</button>
+    </div>
+  `;
+
+  els.closingDocsContent.querySelector('#save-closing-docs-btn').addEventListener('click', async () => {
+    const newChecklist = {};
+    els.closingDocsContent.querySelectorAll('[data-doc-item]').forEach((cb) => {
+      newChecklist[cb.dataset.docItem] = cb.checked;
+    });
+    try {
+      await api(`/api/closing-docs/${customerId}`, { method: 'PUT', body: JSON.stringify({ checklist: newChecklist }) });
+      state.closingDocs[customerId] = newChecklist;
+      alert('Closing docs checklist saved!');
+    } catch (err) { alert(err.message); }
+  });
+}
+
+// ─── Dealer Application ────────────────────────────────────────────────────────
+
+function openDealerAppModal() {
+  els.dealerAppFormContent.innerHTML = `
+    <fieldset>
+      <legend>Borrower Info</legend>
+      <div class="grid two-col" style="gap:8px">
+        <label>First Name <input id="da-firstName" type="text" /></label>
+        <label>Last Name <input id="da-lastName" type="text" /></label>
+        <label>Date of Birth <input id="da-dob" type="date" /></label>
+        <label>SSN (last 4) <input id="da-ssn" type="password" maxlength="4" placeholder="****" /></label>
+        <label>Phone <input id="da-phone" type="tel" /></label>
+        <label>Email <input id="da-email" type="email" /></label>
+        <label class="span-2">Address <input id="da-address" type="text" /></label>
+        <label>City <input id="da-city" type="text" /></label>
+        <label>State <input id="da-state" type="text" maxlength="2" /></label>
+        <label>Zip <input id="da-zip" type="text" maxlength="10" /></label>
+      </div>
+    </fieldset>
+    <fieldset>
+      <legend>
+        <label class="check-label"><input type="checkbox" id="da-co-borrower-toggle" /> Include Co-Borrower</label>
+      </legend>
+      <div id="da-co-borrower-section" class="hidden">
+        <div class="grid two-col" style="gap:8px">
+          <label>First Name <input id="da-co-firstName" type="text" /></label>
+          <label>Last Name <input id="da-co-lastName" type="text" /></label>
+          <label>Phone <input id="da-co-phone" type="tel" /></label>
+          <label>Email <input id="da-co-email" type="email" /></label>
+        </div>
+      </div>
+    </fieldset>
+    <fieldset>
+      <legend>Employment</legend>
+      <div class="grid two-col" style="gap:8px">
+        <label>Employer Name <input id="da-employer" type="text" /></label>
+        <label>Position <input id="da-position" type="text" /></label>
+        <label>Years Employed <input id="da-yearsEmployed" type="number" min="0" step="0.5" /></label>
+        <label>Monthly Income <input id="da-monthlyIncome" type="number" min="0" /></label>
+        <label>Employment Type
+          <select id="da-employmentType">
+            <option value="full">Full-Time</option>
+            <option value="part">Part-Time</option>
+            <option value="self">Self-Employed</option>
+          </select>
+        </label>
+      </div>
+    </fieldset>
+    <fieldset>
+      <legend>Income &amp; Assets</legend>
+      <div class="grid two-col" style="gap:8px">
+        <label>Other Monthly Income <input id="da-otherIncome" type="number" min="0" /></label>
+        <label>Bank Name <input id="da-bankName" type="text" /></label>
+        <label>Account Balance <input id="da-accountBalance" type="number" min="0" /></label>
+        <label>Other Assets <input id="da-otherAssets" type="text" /></label>
+      </div>
+    </fieldset>
+    <fieldset>
+      <legend>Property Info</legend>
+      <div class="grid two-col" style="gap:8px">
+        <label class="span-2">Property Address <input id="da-propAddress" type="text" /></label>
+        <label>City <input id="da-propCity" type="text" /></label>
+        <label>State <input id="da-propState" type="text" maxlength="2" /></label>
+        <label>Zip <input id="da-propZip" type="text" maxlength="10" /></label>
+        <label>Land Owned/Rented
+          <select id="da-landOwned">
+            <option value="owned">Owned</option>
+            <option value="rented">Rented</option>
+            <option value="purchasing">Purchasing</option>
+          </select>
+        </label>
+        <label>Property Type <input id="da-propType" type="text" /></label>
+      </div>
+    </fieldset>
+    <fieldset>
+      <legend>Home Selection</legend>
+      <div class="grid two-col" style="gap:8px">
+        <label>Home Model <input id="da-homeModel" type="text" /></label>
+        <label>Manufacturer <input id="da-manufacturer" type="text" /></label>
+        <label>Year <input id="da-homeYear" type="number" min="1900" max="2100" /></label>
+        <label>Size
+          <select id="da-homeSize">
+            <option value="SW">Single Wide (SW)</option>
+            <option value="DW">Double Wide (DW)</option>
+            <option value="TW">Triple Wide (TW)</option>
+          </select>
+        </label>
+        <label>Condition
+          <select id="da-homeCondition">
+            <option value="new">New</option>
+            <option value="used">Used</option>
+            <option value="repo">Repo</option>
+          </select>
+        </label>
+      </div>
+    </fieldset>
+    <fieldset>
+      <legend>Notes / Comments</legend>
+      <textarea id="da-notes" style="width:100%;min-height:80px"></textarea>
+    </fieldset>
+  `;
+
+  const toggle = els.dealerAppFormContent.querySelector('#da-co-borrower-toggle');
+  const section = els.dealerAppFormContent.querySelector('#da-co-borrower-section');
+  toggle.addEventListener('change', () => section.classList.toggle('hidden', !toggle.checked));
+
+  els.dealerAppModal.showModal();
+}
+
+els.dealerAppCancelBtn.addEventListener('click', () => els.dealerAppModal.close());
+
+els.dealerAppSubmitBtn.addEventListener('click', async () => {
+  const g = (id) => (document.getElementById(id) || {}).value || '';
+  const payload = {
+    borrower: { firstName: g('da-firstName'), lastName: g('da-lastName'), dob: g('da-dob'), ssn: g('da-ssn'), phone: g('da-phone'), email: g('da-email'), address: g('da-address'), city: g('da-city'), state: g('da-state'), zip: g('da-zip') },
+    coBorrower: document.getElementById('da-co-borrower-toggle')?.checked ? { firstName: g('da-co-firstName'), lastName: g('da-co-lastName'), phone: g('da-co-phone'), email: g('da-co-email') } : null,
+    employment: { employer: g('da-employer'), position: g('da-position'), yearsEmployed: g('da-yearsEmployed'), monthlyIncome: g('da-monthlyIncome'), employmentType: g('da-employmentType') },
+    incomeAssets: { otherIncome: g('da-otherIncome'), bankName: g('da-bankName'), accountBalance: g('da-accountBalance'), otherAssets: g('da-otherAssets') },
+    property: { address: g('da-propAddress'), city: g('da-propCity'), state: g('da-propState'), zip: g('da-propZip'), landOwned: g('da-landOwned'), propType: g('da-propType') },
+    homeSelection: { model: g('da-homeModel'), manufacturer: g('da-manufacturer'), year: g('da-homeYear'), size: g('da-homeSize'), condition: g('da-homeCondition') },
+    notes: g('da-notes')
+  };
+  try {
+    await api('/api/dealer-applications', { method: 'POST', body: JSON.stringify(payload) });
+    els.dealerAppModal.close();
+    alert('Application submitted successfully!');
+  } catch (err) { alert(err.message); }
+});
+
+// ─── Permissions modal ────────────────────────────────────────────────────────
+
+const PAGE_PERMISSIONS_LIST = [
+  { key: 'leads', label: 'Leads' },
+  { key: 'contacts', label: 'Contacts' },
+  { key: 'active-customers', label: 'Active Customers' },
+  { key: 'pipeline', label: 'Pipeline' },
+  { key: 'reports', label: 'Reports' },
+  { key: 'deal-tracker', label: 'Master Deal Tracker' },
+  { key: 'closing-docs', label: 'Closing Docs' },
+  { key: 'dealer-app', label: 'Dealer Application' },
+  { key: 'tasks', label: 'Tasks' },
+  { key: 'templates', label: 'Templates' }
+];
+
+function openPermissionsModal(user) {
+  state.permissionsUserId = user.id;
+  els.permissionsUserName.textContent = `User: ${user.name} (${user.email})`;
+  const perms = user.pagePermissions || {};
+  els.permissionsCheckboxes.innerHTML = PAGE_PERMISSIONS_LIST.map(({ key, label }) => {
+    const checked = perms[key] !== false;
+    return `<label class="check-label"><input type="checkbox" data-perm-key="${escHtml(key)}" ${checked ? 'checked' : ''} /> ${escHtml(label)}</label>`;
+  }).join('');
+  els.permissionsModal.showModal();
+}
+
+els.permissionsCancelBtn.addEventListener('click', () => els.permissionsModal.close());
+
+els.permissionsSaveBtn.addEventListener('click', async () => {
+  const pagePermissions = {};
+  els.permissionsCheckboxes.querySelectorAll('[data-perm-key]').forEach((cb) => {
+    pagePermissions[cb.dataset.permKey] = cb.checked;
+  });
+  try {
+    await api(`/api/admin/users/${state.permissionsUserId}/permissions`, { method: 'PUT', body: JSON.stringify({ pagePermissions }) });
+    const idx = state.users.findIndex((u) => u.id === state.permissionsUserId);
+    if (idx > -1) state.users[idx].pagePermissions = pagePermissions;
+    els.permissionsModal.close();
+    alert('Permissions saved!');
+  } catch (err) { alert(err.message); }
+});
+
+// ─── Settings modal ───────────────────────────────────────────────────────────
+
+function openSettingsModal() {
+  els.settingsCalcUrl.value = state.settings.calcUrl || 'https://www.mortgagecalculator.org/';
+  els.settingsModal.showModal();
+}
+
+els.settingsCancelBtn.addEventListener('click', () => els.settingsModal.close());
+
+els.settingsSaveBtn.addEventListener('click', async () => {
+  const calcUrl = els.settingsCalcUrl.value.trim();
+  try {
+    const result = await api('/api/settings', { method: 'PUT', body: JSON.stringify({ calcUrl }) });
+    state.settings = result.settings;
+    els.settingsModal.close();
+    alert('Settings saved!');
+  } catch (err) { alert(err.message); }
+});
+
+// ─── AB Calculator modal ─────────────────────────────────────────────────────
+
+function openAbCalcModal() {
+  const url = state.settings.calcUrl || 'https://www.mortgagecalculator.org/';
+  els.abCalcIframe.src = url;
+  els.abCalcOpenTabBtn.href = url;
+  els.abCalcModal.showModal();
+}
+
+els.abCalcCloseBtn.addEventListener('click', () => {
+  els.abCalcModal.close();
+  els.abCalcIframe.src = '';
 });
 
 function populateTemplatePicker() {
@@ -1427,7 +2166,7 @@ async function initializeAuthedState() {
   try {
     const me = await api('/api/auth/me');
     state.user = me.user;
-    const loaders = [loadLeads(), loadTemplates(), loadTasks(), loadContacts(), loadActiveCustomers()];
+    const loaders = [loadLeads(), loadTemplates(), loadTasks(), loadContacts(), loadActiveCustomers(), loadSettings()];
     if (currentUserIsAdmin()) loaders.push(loadUsers());
     await Promise.all(loaders);
     render();
@@ -1451,6 +2190,20 @@ async function loadContacts() {
 async function loadActiveCustomers() {
   const data = await api('/api/active-customers');
   state.activeCustomers = data.customers || [];
+}
+
+async function loadDealTrackers() {
+  try {
+    const data = await api('/api/deal-trackers');
+    state.dealTrackers = data.trackers || [];
+  } catch { state.dealTrackers = []; }
+}
+
+async function loadSettings() {
+  try {
+    const data = await api('/api/settings');
+    state.settings = data.settings || { calcUrl: 'https://www.mortgagecalculator.org/' };
+  } catch { state.settings = { calcUrl: 'https://www.mortgagecalculator.org/' }; }
 }
 
 // ─── Contacts panel ───────────────────────────────────────────────────────────
@@ -2352,7 +3105,7 @@ els.loginForm.addEventListener('submit', async (event) => {
     state.token = result.token;
     state.user = result.user;
     localStorage.setItem('crm_token', state.token);
-    const loaders = [loadLeads(), loadTemplates(), loadTasks(), loadContacts(), loadActiveCustomers()];
+    const loaders = [loadLeads(), loadTemplates(), loadTasks(), loadContacts(), loadActiveCustomers(), loadSettings()];
     if (currentUserIsAdmin()) loaders.push(loadUsers());
     await Promise.all(loaders);
     nav('/');
@@ -2367,7 +3120,7 @@ els.registerForm.addEventListener('submit', async (event) => {
     state.token = result.token;
     state.user = result.user;
     localStorage.setItem('crm_token', state.token);
-    const loaders = [loadLeads(), loadTemplates(), loadTasks(), loadContacts(), loadActiveCustomers()];
+    const loaders = [loadLeads(), loadTemplates(), loadTasks(), loadContacts(), loadActiveCustomers(), loadSettings()];
     if (currentUserIsAdmin()) loaders.push(loadUsers());
     await Promise.all(loaders);
     nav('/');
@@ -2379,13 +3132,25 @@ els.toggleLoginBtn.addEventListener('click', (e) => { e.preventDefault(); els.re
 
 els.logoutBtn.addEventListener('click', () => {
   state.token = ''; state.user = null; state.leads = []; state.tasks = []; state.templates = [];
-  state.contacts = []; state.activeCustomers = [];
+  state.contacts = []; state.activeCustomers = []; state.dealTrackers = []; state.closingDocs = {};
   localStorage.removeItem('crm_token');
   nav('/');
 });
 
+function allPanels() {
+  return [els.tasksPanel, els.templatesPanel, els.usersPanel, els.contactsPanel,
+    els.activeCustomersPanel, els.pipelinePanel, els.reportsPanelEl,
+    els.dealTrackerPanel, els.closingDocsPanel].filter(Boolean);
+}
+
 els.newLeadBtn.addEventListener('click', () => openLeadModal());
-els.exportBtn.addEventListener('click', downloadCsv);
+els.exportBtn.addEventListener('click', async () => {
+  await loadContacts();
+  await loadActiveCustomers();
+  renderReportsPanel();
+  allPanels().forEach((p) => { if (p !== els.reportsPanelEl) p.classList.add('hidden'); });
+  els.reportsPanelEl.classList.toggle('hidden');
+});
 els.leadCancelBtn.addEventListener('click', () => els.leadModal.close());
 els.saveLeadBtn.addEventListener('click', submitLeadForm);
 
@@ -2481,6 +3246,71 @@ els.pipelineFilterLender.addEventListener('change', (e) => {
   renderPipelineMonthContent();
 });
 els.pipelineExportCsvBtn.addEventListener('click', exportPipelineCsv);
+
+// Reports panel
+els.reportsCloseBtn.addEventListener('click', () => els.reportsPanelEl.classList.add('hidden'));
+els.reportsTabBar.querySelectorAll('.pipe-tab').forEach((tab) => {
+  tab.addEventListener('click', () => {
+    state.activeReportTab = tab.dataset.report;
+    renderReportsPanel();
+  });
+});
+
+// Leads tab button
+els.leadsTabBtn.addEventListener('click', () => {
+  state.leadsTabVisible = !state.leadsTabVisible;
+  if (state.leadsTabVisible) {
+    allPanels().forEach((p) => p.classList.add('hidden'));
+    els.listView.classList.remove('hidden');
+  } else {
+    els.listView.classList.add('hidden');
+  }
+  els.leadsTabBtn.classList.toggle('active', state.leadsTabVisible);
+});
+
+// Deal Tracker
+els.dealTrackerBtn.addEventListener('click', async () => {
+  await loadDealTrackers();
+  renderDealTrackerPanel();
+  allPanels().forEach((p) => { if (p !== els.dealTrackerPanel) p.classList.add('hidden'); });
+  els.dealTrackerPanel.classList.toggle('hidden');
+});
+els.dealTrackerCloseBtn.addEventListener('click', () => els.dealTrackerPanel.classList.add('hidden'));
+els.newDealTrackerBtn.addEventListener('click', () => openDealTrackerModal(null));
+
+// Closing Docs
+els.closingDocsBtn.addEventListener('click', async () => {
+  await loadActiveCustomers();
+  allPanels().forEach((p) => { if (p !== els.closingDocsPanel) p.classList.add('hidden'); });
+  els.closingDocsPanel.classList.toggle('hidden');
+  if (!els.closingDocsPanel.classList.contains('hidden')) renderClosingDocsPanel();
+});
+els.closingDocsCloseBtn.addEventListener('click', () => els.closingDocsPanel.classList.add('hidden'));
+els.closingDocsCustomerSelect.addEventListener('change', async () => {
+  const customerId = els.closingDocsCustomerSelect.value;
+  if (customerId) {
+    try {
+      const data = await api(`/api/closing-docs/${customerId}`);
+      state.closingDocs[customerId] = data.closingDocs || {};
+    } catch { state.closingDocs[customerId] = {}; }
+  }
+  renderClosingDocsPanel();
+});
+
+// Dealer App
+els.dealerAppBtn.addEventListener('click', () => openDealerAppModal());
+
+// AB Calculator
+els.abCalcBtn.addEventListener('click', async () => {
+  await loadSettings();
+  openAbCalcModal();
+});
+
+// Settings
+els.settingsBtn.addEventListener('click', async () => {
+  await loadSettings();
+  openSettingsModal();
+});
 
 els.listToggle.addEventListener('click', () => { state.view = 'list'; render(); });
 els.boardToggle.addEventListener('click', () => { state.view = 'board'; render(); });
