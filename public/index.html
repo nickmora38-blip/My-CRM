@@ -112,9 +112,18 @@
           </div>
           <div class="contacts-pipeline-bar" id="contacts-pipeline-bar">
             <span data-stage="all" class="pipe-tab active">All</span>
-            <span data-stage="Call Back Scheduled" class="pipe-tab">Call Back Scheduled</span>
-            <span data-stage="Appointment Set" class="pipe-tab">Appointment Set</span>
-            <span data-stage="Application Sent" class="pipe-tab">Application Sent</span>
+            <span data-stage="App Submitted" class="pipe-tab">App Submitted</span>
+            <span data-stage="Approve" class="pipe-tab">Approve</span>
+            <span data-stage="In Process" class="pipe-tab">In Process</span>
+            <span data-stage="Conditions Cleared" class="pipe-tab">Conditions Cleared</span>
+            <span data-stage="Closing Requested" class="pipe-tab">Closing Requested</span>
+            <span data-stage="Closed" class="pipe-tab">Closed</span>
+            <span data-stage="Pending Delivery" class="pipe-tab">Pending Delivery</span>
+            <span data-stage="Delivered Pending Construction" class="pipe-tab">Delivered Pending Construction</span>
+            <span data-stage="Funded" class="pipe-tab">Funded</span>
+            <span data-stage="Complete" class="pipe-tab">Complete</span>
+            <span data-stage="Dead" class="pipe-tab">Dead</span>
+            <span data-stage="DNQ" class="pipe-tab">DNQ</span>
           </div>
           <div id="contacts-list"></div>
         </section>
@@ -179,16 +188,17 @@
           <div id="pipeline-month-tabs" class="month-tabs"></div>
           <div id="pipeline-report-content"></div>
         </section>
+        <section id="list-view">
           <div class="filters">
             <input id="search-input" placeholder="Search name, route, source…" />
             <select id="status-filter">
               <option value="">All Pipeline Stages</option>
-              <option>New</option>
-              <option>Contacted</option>
-              <option>Qualified</option>
-              <option>Proposal</option>
-              <option>Won</option>
-              <option>Lost</option>
+              <option>New Lead</option>
+              <option>Hot Lead</option>
+              <option>Appointment Set</option>
+              <option>Active</option>
+              <option>Dead</option>
+              <option>Junk</option>
             </select>
             <select id="source-filter">
               <option value="">All Sources</option>
@@ -250,12 +260,12 @@
             </label>
             <label>Pipeline Stage
               <select name="status">
-                <option>New</option>
-                <option>Contacted</option>
-                <option>Qualified</option>
-                <option>Proposal</option>
-                <option>Won</option>
-                <option>Lost</option>
+                <option>New Lead</option>
+                <option>Hot Lead</option>
+                <option>Appointment Set</option>
+                <option>Active</option>
+                <option>Dead</option>
+                <option>Junk</option>
               </select>
             </label>
             <label>Move Date <input name="moveDate" type="date" /></label>
@@ -456,9 +466,18 @@
             <label>Route <input id="contact-route" type="text" /></label>
             <label>Pipeline Status
               <select id="contact-pipelineStatus">
-                <option>Call Back Scheduled</option>
-                <option>Appointment Set</option>
-                <option>Application Sent</option>
+                <option>App Submitted</option>
+                <option>Approve</option>
+                <option>In Process</option>
+                <option>Conditions Cleared</option>
+                <option>Closing Requested</option>
+                <option>Closed</option>
+                <option>Pending Delivery</option>
+                <option>Delivered Pending Construction</option>
+                <option>Funded</option>
+                <option>Complete</option>
+                <option>Dead</option>
+                <option>DNQ</option>
               </select>
             </label>
             <label>Source
