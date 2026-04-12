@@ -2,6 +2,7 @@ services:
   - type: web
     name: my-crm
     runtime: node
+    buildCommand: cd client && npm install && npm run build && cd ..
     startCommand: npm start
     envVars:
       - key: NODE_ENV
