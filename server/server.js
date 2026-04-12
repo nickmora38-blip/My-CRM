@@ -732,6 +732,7 @@ app.put('/api/leads/:id', (req, res) => {
   const now = new Date().toISOString();
   const previousResponseStatus = lead.responseStatus;
   const previousMoveTimeline = lead.moveTimeline;
+  const previousStatus = lead.status;
 
   leads[idx] = {
     ...lead,
@@ -788,9 +789,9 @@ app.put('/api/leads/:id', (req, res) => {
 
   writeLeads(leads);
 
-  // Auto-convert to contact when status is set to 'Active'
+  // Auto-convert to contact when status is set to 'Active' for the first time
   let conversionResult = null;
-  if (patch.status === 'Active' && lead.status !== 'Active') {
+  if (patch.status === 'Active' && previousStatus !== 'Active') {
     conversionResult = convertLeadToContact(leads[idx], req.user.sub, readUsers());
   }
 
