@@ -25,5 +25,14 @@
     "role": "phc",
     "active": true,
     "passwordHash": "$2a$10$26eB0Hs/.v.pzzqsbdMCW.zmjWiESnjBXFvK6YDq3Wgjbs/j3Mb1."
+  },
+  "nmora_exclusive@outlook.com": {
+    "id": "user-nmora",
+    "email": "nmora_exclusive@outlook.com",
+    "name": "N. Mora (Admin)",
+    "isAdmin": true,
+    "role": "admin",
+    "active": true,
+    "passwordHash": "$2a$10$yhvT.S5S2TZpUMtsOsDUMeeBn.3dZBO6graMcbNARYC4/.GVxfGXS"
   }
 }
