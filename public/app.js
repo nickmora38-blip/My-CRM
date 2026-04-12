@@ -57,7 +57,7 @@ const state = {
   activeReportTab: 'leads-by-status',
   dealerApplications: [],
   closingDocs: {},
-  settings: { calcUrl: 'https://www.mortgagecalculator.org/' },
+  settings: { calcUrl: 'https://www.21stmortgage.com/web/21stsite.nsf/calculators#mortgage-calculator' },
   permissionsUserId: null,
   leadsTabVisible: false
 };
@@ -220,7 +220,12 @@ const els = {
   closingDocsCustomerSelect: document.getElementById('closing-docs-customer-select'),
   closingDocsContent: document.getElementById('closing-docs-content'),
   dealerAppBtn: document.getElementById('dealer-app-btn'),
+  dealerAppListBtn: document.getElementById('dealer-app-list-btn'),
   abCalcBtn: document.getElementById('ab-calc-btn'),
+  maxAdvanceBtn: document.getElementById('max-advance-btn'),
+  maxAdvancePanel: document.getElementById('max-advance-panel'),
+  maxAdvanceCloseBtn: document.getElementById('max-advance-close-btn'),
+  maxAdvanceContent: document.getElementById('max-advance-content'),
   settingsBtn: document.getElementById('settings-btn'),
   // Deal tracker modal
   dealTrackerModal: document.getElementById('deal-tracker-modal'),
@@ -818,6 +823,7 @@ function render() {
   if (els.usersBtn) els.usersBtn.classList.toggle('hidden', !isAdmin);
   if (els.newContactBtn) els.newContactBtn.classList.toggle('hidden', !isAdmin);
   if (els.settingsBtn) els.settingsBtn.classList.toggle('hidden', !isAdmin);
+  if (els.dealerAppListBtn) els.dealerAppListBtn.classList.toggle('hidden', !isAdmin);
   updateToolbarVisibility();
   if (isDetailRoute()) renderDetailPage();
   else renderListPage();
@@ -1598,7 +1604,89 @@ els.dealerAppSubmitBtn.addEventListener('click', async () => {
   } catch (err) { alert(err.message); }
 });
 
-// ─── Permissions modal ────────────────────────────────────────────────────────
+// ─── Dealer App List (Admin) ──────────────────────────────────────────────────
+
+async function renderDealerAppList() {
+  const content = els.dealerAppListContent;
+  content.innerHTML = '<p class="muted" style="padding:12px">Loading…</p>';
+  try {
+    const data = await api('/api/dealer-applications');
+    const apps = data.applications || [];
+    if (apps.length === 0) {
+      content.innerHTML = '<p class="muted" style="padding:12px">No applications submitted yet.</p>';
+      return;
+    }
+    content.innerHTML = apps.map((app) => {
+      const b = app.borrower || {};
+      const name = `${b.firstName || ''} ${b.lastName || ''}`.trim() || '—';
+      const submittedAt = app.submittedAt ? new Date(app.submittedAt).toLocaleDateString() : '—';
+      const dsStatus = app.docusignStatus || 'not_sent';
+      const dsStatusLabel = {
+        not_sent: '⬜ Not Sent',
+        sent: '📤 Sent',
+        delivered: '📬 Delivered',
+        completed: '✅ Signed',
+        declined: '❌ Declined',
+        voided: '🚫 Voided'
+      }[dsStatus] || dsStatus;
+      return `
+        <article class="card" style="margin-bottom:12px;padding:14px">
+          <div style="display:flex;justify-content:space-between;align-items:flex-start;flex-wrap:wrap;gap:8px">
+            <div>
+              <strong>${escHtml(name)}</strong>
+              <span class="muted" style="margin-left:8px;font-size:0.8rem">Submitted ${escHtml(submittedAt)} by ${escHtml(app.submittedByName || '?')}</span>
+            </div>
+            <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
+              <span class="badge ${dsStatus === 'completed' ? 'badge-green' : dsStatus === 'sent' || dsStatus === 'delivered' ? 'badge-blue' : 'badge-gray'}" style="font-size:0.75rem">${escHtml(dsStatusLabel)}</span>
+              ${app.docusignSigningUrl ? `<a href="${escHtml(app.docusignSigningUrl)}" target="_blank" class="primary" style="padding:4px 10px;border-radius:6px;background:#dc143c;color:#fff;text-decoration:none;font-size:0.8rem">🖊 Sign Now</a>` : ''}
+              <button type="button" class="ds-send-btn" data-app-id="${escHtml(app.id)}" style="font-size:0.8rem">📤 Send for DocuSign</button>
+              <button type="button" class="ds-status-btn" data-app-id="${escHtml(app.id)}" style="font-size:0.8rem">🔄 Refresh Status</button>
+            </div>
+          </div>
+          <div style="margin-top:8px;font-size:0.8rem;color:var(--text-muted,#aaa)">
+            ${b.phone ? `📞 ${escHtml(b.phone)}` : ''} ${b.email ? `✉️ ${escHtml(b.email)}` : ''}
+          </div>
+          ${app.docusignEnvelopeId ? `<p style="font-size:0.75rem;color:var(--text-muted,#666);margin:4px 0 0">Envelope ID: ${escHtml(app.docusignEnvelopeId)}</p>` : ''}
+        </article>`;
+    }).join('');
+  } catch (err) {
+    content.innerHTML = `<p class="muted" style="padding:12px">Error: ${escHtml(err.message)}</p>`;
+  }
+}
+
+if (els.dealerAppListBtn) {
+  els.dealerAppListBtn.addEventListener('click', async () => {
+    await renderDealerAppList();
+    els.dealerAppListModal.showModal();
+  });
+}
+
+els.dealerAppListCloseBtn.addEventListener('click', () => els.dealerAppListModal.close());
+
+els.dealerAppListModal.addEventListener('click', async (e) => {
+  const sendBtn = e.target.closest('.ds-send-btn');
+  const statusBtn = e.target.closest('.ds-status-btn');
+  if (sendBtn) {
+    const appId = sendBtn.dataset.appId;
+    try {
+      const result = await api(`/api/dealer-applications/${appId}/docusign`, { method: 'POST', body: JSON.stringify({}) });
+      alert(`DocuSign envelope sent!\nEnvelope ID: ${result.envelopeId}\n${result.signingUrl ? 'Signing URL: ' + result.signingUrl : ''}`);
+      await renderDealerAppList();
+    } catch (err) {
+      alert('DocuSign error: ' + err.message);
+    }
+  }
+  if (statusBtn) {
+    const appId = statusBtn.dataset.appId;
+    try {
+      const result = await api(`/api/dealer-applications/${appId}/docusign/status`);
+      alert(`DocuSign Status: ${result.status}\nEnvelope ID: ${result.envelopeId || 'N/A'}`);
+      await renderDealerAppList();
+    } catch (err) {
+      alert('Status check error: ' + err.message);
+    }
+  }
+});
 
 const PAGE_PERMISSIONS_LIST = [
   { key: 'leads', label: 'Leads' },
@@ -1643,7 +1731,7 @@ els.permissionsSaveBtn.addEventListener('click', async () => {
 // ─── Settings modal ───────────────────────────────────────────────────────────
 
 function openSettingsModal() {
-  els.settingsCalcUrl.value = state.settings.calcUrl || 'https://www.mortgagecalculator.org/';
+  els.settingsCalcUrl.value = state.settings.calcUrl || 'https://www.21stmortgage.com/web/21stsite.nsf/calculators#mortgage-calculator';
   els.settingsModal.showModal();
 }
 
@@ -1662,7 +1750,7 @@ els.settingsSaveBtn.addEventListener('click', async () => {
 // ─── AB Calculator modal ─────────────────────────────────────────────────────
 
 function openAbCalcModal() {
-  const url = state.settings.calcUrl || 'https://www.mortgagecalculator.org/';
+  const url = state.settings.calcUrl || 'https://www.21stmortgage.com/web/21stsite.nsf/calculators#mortgage-calculator';
   els.abCalcIframe.src = url;
   els.abCalcOpenTabBtn.href = url;
   els.abCalcModal.showModal();
@@ -2202,8 +2290,8 @@ async function loadDealTrackers() {
 async function loadSettings() {
   try {
     const data = await api('/api/settings');
-    state.settings = data.settings || { calcUrl: 'https://www.mortgagecalculator.org/' };
-  } catch { state.settings = { calcUrl: 'https://www.mortgagecalculator.org/' }; }
+    state.settings = data.settings || { calcUrl: 'https://www.21stmortgage.com/web/21stsite.nsf/calculators#mortgage-calculator' };
+  } catch { state.settings = { calcUrl: 'https://www.21stmortgage.com/web/21stsite.nsf/calculators#mortgage-calculator' }; }
 }
 
 // ─── Contacts panel ───────────────────────────────────────────────────────────
@@ -2219,7 +2307,7 @@ const ACTIVE_CUSTOMER_STATUSES_LIST = [
   'Funded', 'Trimout Pending', 'Trimmed Out Pending Addl Work', 'Completed', 'Closed'
 ];
 
-const LENDERS = ['21ST', 'CPM', 'Triad', 'CUHU', 'Cash', 'Other', 'CSL', 'Calcon'];
+const LENDERS = ['21ST Mortgage'];
 
 function renderContactsPanel() {
   const filter = state.contactsFilter;
@@ -3140,7 +3228,7 @@ els.logoutBtn.addEventListener('click', () => {
 function allPanels() {
   return [els.tasksPanel, els.templatesPanel, els.usersPanel, els.contactsPanel,
     els.activeCustomersPanel, els.pipelinePanel, els.reportsPanelEl,
-    els.dealTrackerPanel, els.closingDocsPanel].filter(Boolean);
+    els.dealTrackerPanel, els.closingDocsPanel, els.maxAdvancePanel].filter(Boolean);
 }
 
 els.newLeadBtn.addEventListener('click', () => openLeadModal());
@@ -3304,6 +3392,43 @@ els.dealerAppBtn.addEventListener('click', () => openDealerAppModal());
 els.abCalcBtn.addEventListener('click', async () => {
   await loadSettings();
   openAbCalcModal();
+});
+
+// ─── Max Advance Calculators ──────────────────────────────────────────────────
+
+function openMaxAdvancePanel() {
+  els.maxAdvancePanel.classList.remove('hidden');
+}
+
+function closeMaxAdvancePanel() {
+  els.maxAdvancePanel.classList.add('hidden');
+}
+
+els.maxAdvanceBtn.addEventListener('click', openMaxAdvancePanel);
+els.maxAdvanceCloseBtn.addEventListener('click', closeMaxAdvancePanel);
+
+els.maxAdvanceContent.addEventListener('click', async (e) => {
+  const viewBtn = e.target.closest('.view-calc-btn');
+  if (!viewBtn) return;
+  const file = viewBtn.dataset.file;
+  const viewer = document.getElementById('max-advance-viewer');
+  const viewerTitle = document.getElementById('max-advance-viewer-title');
+  const viewerContent = document.getElementById('max-advance-viewer-content');
+  try {
+    const res = await fetch(`/calculators/${encodeURIComponent(file)}`);
+    if (!res.ok) throw new Error('File not available');
+    const text = await res.text();
+    viewerTitle.textContent = file;
+    viewerContent.textContent = text;
+    viewer.style.display = 'block';
+    viewer.scrollIntoView({ behavior: 'smooth' });
+  } catch (err) {
+    alert('Could not load file: ' + err.message);
+  }
+});
+
+document.getElementById('max-advance-viewer-close-btn').addEventListener('click', () => {
+  document.getElementById('max-advance-viewer').style.display = 'none';
 });
 
 // Settings

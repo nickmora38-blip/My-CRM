@@ -77,6 +77,56 @@ npm start
 | `PORT` | 3001 | Server port |
 | `JWT_SECRET` | dev-only-secret-change-in-production | JWT signing key (MUST change in production) |
 | `NODE_ENV` | development | Environment mode |
+| `DOCUSIGN_INTEGRATION_KEY` | *(unset)* | DocuSign OAuth integration key / client ID |
+| `DOCUSIGN_SECRET_KEY` | *(unset)* | DocuSign access token (or OAuth secret) |
+| `DOCUSIGN_ACCOUNT_ID` | *(unset)* | DocuSign account/API account ID |
+| `DOCUSIGN_BASE_URL` | `https://demo.docusign.net/restapi` | DocuSign REST API base URL (use `https://www.docusign.net/restapi` for production) |
+| `DOCUSIGN_USER_ID` | *(unset)* | DocuSign user ID (for JWT grant flow) |
+| `DOCUSIGN_PRIVATE_KEY` | *(unset)* | DocuSign RSA private key content (for JWT grant flow) |
+| `APP_URL` | `http://localhost:3001` | Base URL of this application (used for DocuSign return URLs) |
+
+## DocuSign Setup
+
+1. **Create a DocuSign Developer Account** at [https://developers.docusign.com](https://developers.docusign.com).
+
+2. **Create an Integration Key (App)** in the DocuSign Admin console:
+   - Go to **Settings → Apps and Keys**
+   - Click **Add App and Integration Key**
+   - Note the **Integration Key** (this is `DOCUSIGN_INTEGRATION_KEY`)
+
+3. **Generate an Access Token** for testing:
+   - In the DocuSign demo sandbox, go to **User Settings → Generate Access Token**
+   - Copy the token; this is your `DOCUSIGN_SECRET_KEY` for initial setup
+
+4. **Get your Account ID**:
+   - From [https://demo.docusign.net/restapi/v2.1/accounts](https://demo.docusign.net/restapi/v2.1/accounts) (with your token)
+   - Or from the DocuSign Admin dashboard under Account Profile
+
+5. **Set environment variables** (local development):
+   ```bash
+   export DOCUSIGN_INTEGRATION_KEY=your-integration-key
+   export DOCUSIGN_SECRET_KEY=your-access-token
+   export DOCUSIGN_ACCOUNT_ID=your-account-id
+   # Optional: use production URL when ready
+   export DOCUSIGN_BASE_URL=https://www.docusign.net/restapi
+   ```
+
+6. **On Heroku / Render:**
+   ```bash
+   heroku config:set DOCUSIGN_INTEGRATION_KEY=your-integration-key
+   heroku config:set DOCUSIGN_SECRET_KEY=your-access-token
+   heroku config:set DOCUSIGN_ACCOUNT_ID=your-account-id
+   ```
+
+7. **Using the DocuSign feature**:
+   - Submit a Dealer Application via the **📄 Dealer App** button
+   - Admin users can view submitted applications via **📋 View Apps**
+   - Click **📤 Send for DocuSign** next to any application to create a signing envelope
+   - The borrower's email will receive a DocuSign signing invitation
+   - Click **🔄 Refresh Status** to check the signing status
+   - If an embedded signing URL is returned, a **🖊 Sign Now** link will appear
+
+> **Note:** The application document ("Application") is auto-generated from the form data and includes all borrower, employment, property, and home selection fields. DocuSign anchor tabs place a signature field at the `Borrower Signature:` line.
 
 ## API Reference
 
