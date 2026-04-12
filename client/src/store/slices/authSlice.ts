@@ -6,17 +6,26 @@ interface AuthState {
   error: string | null;
 }
 
-const storedUser = localStorage.getItem('crm_user');
-let parsedUser: AuthState['user'] = null;
-try {
-  parsedUser = storedUser ? JSON.parse(storedUser) : null;
-} catch {
-  parsedUser = null;
+function getStoredToken(): string | null {
+  try {
+    return localStorage.getItem('crm_token');
+  } catch {
+    return null;
+  }
+}
+
+function getStoredUser(): AuthState['user'] {
+  try {
+    const storedUser = localStorage.getItem('crm_user');
+    return storedUser ? JSON.parse(storedUser) : null;
+  } catch {
+    return null;
+  }
 }
 
 const initialState: AuthState = {
-  token: localStorage.getItem('crm_token'),
-  user: parsedUser,
+  token: getStoredToken(),
+  user: getStoredUser(),
   error: null,
 };
 
