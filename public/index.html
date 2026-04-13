@@ -74,6 +74,7 @@
             <button id="settings-btn" class="hidden">⚙️ Settings</button>
             <button id="users-btn" class="hidden">👥 Users</button>
             <button id="export-btn">📊 Reports</button>
+            <button id="profile-btn">👤 Profile</button>
             <button id="logout-btn">Logout</button>
           </div>
         </header>
@@ -785,6 +786,44 @@
     <dialog id="deal-detail-modal">
       <div style="min-width:540px;max-width:700px;max-height:90vh;overflow-y:auto">
         <div id="deal-detail-content"></div>
+      </div>
+    </dialog>
+
+    <!-- User Profile Modal -->
+    <dialog id="profile-modal">
+      <div style="min-width:440px;max-width:520px">
+        <h3>👤 My Profile</h3>
+        <fieldset style="margin-bottom:12px">
+          <legend>Account Info</legend>
+          <div class="grid" style="gap:8px">
+            <label>Display Name <input id="profile-name" type="text" placeholder="Your Name" /></label>
+            <label>Email <input id="profile-email" disabled style="opacity:0.55;cursor:not-allowed" /></label>
+            <label>Role <input id="profile-role" disabled style="opacity:0.55;cursor:not-allowed" /></label>
+          </div>
+        </fieldset>
+        <fieldset style="margin-bottom:12px">
+          <legend>📱 SMS Notifications</legend>
+          <div class="grid" style="gap:8px">
+            <label>Phone Number (for SMS) <input id="profile-phone" type="tel" placeholder="+15551234567" /></label>
+            <label class="check-label" style="display:flex;align-items:center;gap:8px;margin-top:4px">
+              <input type="checkbox" id="profile-sms-optin" />
+              <span>Receive SMS notifications</span>
+            </label>
+          </div>
+        </fieldset>
+        <fieldset style="margin-bottom:12px">
+          <legend>🔑 Change Password</legend>
+          <p class="hint" style="margin:0 0 8px">Leave blank to keep your current password.</p>
+          <div class="grid two-col" style="gap:8px">
+            <label>Current Password <input id="profile-current-password" type="password" autocomplete="current-password" /></label>
+            <label>New Password <input id="profile-new-password" type="password" autocomplete="new-password" /></label>
+          </div>
+        </fieldset>
+        <p id="profile-save-msg" class="hint" style="display:none;color:var(--primary,#dc143c)">✓ Profile saved!</p>
+        <menu>
+          <button type="button" id="profile-cancel-btn">Cancel</button>
+          <button type="button" id="profile-save-btn" class="primary">Save Profile</button>
+        </menu>
       </div>
     </dialog>
 

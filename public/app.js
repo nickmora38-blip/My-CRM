@@ -278,7 +278,20 @@ const els = {
   permissionsUserName: document.getElementById('permissions-user-name'),
   permissionsCheckboxes: document.getElementById('permissions-checkboxes'),
   permissionsCancelBtn: document.getElementById('permissions-cancel-btn'),
-  permissionsSaveBtn: document.getElementById('permissions-save-btn')
+  permissionsSaveBtn: document.getElementById('permissions-save-btn'),
+  // Profile modal
+  profileBtn: document.getElementById('profile-btn'),
+  profileModal: document.getElementById('profile-modal'),
+  profileName: document.getElementById('profile-name'),
+  profileEmail: document.getElementById('profile-email'),
+  profileRole: document.getElementById('profile-role'),
+  profilePhone: document.getElementById('profile-phone'),
+  profileSmsOptIn: document.getElementById('profile-sms-optin'),
+  profileCurrentPassword: document.getElementById('profile-current-password'),
+  profileNewPassword: document.getElementById('profile-new-password'),
+  profileSaveMsg: document.getElementById('profile-save-msg'),
+  profileCancelBtn: document.getElementById('profile-cancel-btn'),
+  profileSaveBtn: document.getElementById('profile-save-btn')
 };
 
 // ─── API helper ───────────────────────────────────────────────────────────────
@@ -3741,6 +3754,64 @@ document.getElementById('max-advance-viewer-close-btn').addEventListener('click'
 els.settingsBtn.addEventListener('click', async () => {
   await loadSettings();
   openSettingsModal();
+});
+
+// ─── User Profile ─────────────────────────────────────────────────────────────
+
+async function openProfileModal() {
+  try {
+    const data = await api('/api/users/me');
+    const u = data.user;
+    els.profileName.value = u.name || '';
+    els.profileEmail.value = u.email || '';
+    els.profileRole.value = u.role || '';
+    els.profilePhone.value = u.phoneNumber || '';
+    els.profileSmsOptIn.checked = !!u.smsOptIn;
+    els.profileCurrentPassword.value = '';
+    els.profileNewPassword.value = '';
+    els.profileSaveMsg.style.display = 'none';
+    els.profileModal.showModal();
+  } catch (err) {
+    alert(err.message);
+  }
+}
+
+els.profileBtn.addEventListener('click', openProfileModal);
+
+els.profileCancelBtn.addEventListener('click', () => els.profileModal.close());
+
+els.profileSaveBtn.addEventListener('click', async () => {
+  const name = els.profileName.value.trim();
+  const phoneNumber = els.profilePhone.value.trim();
+  const smsOptIn = els.profileSmsOptIn.checked;
+  const currentPassword = els.profileCurrentPassword.value;
+  const newPassword = els.profileNewPassword.value;
+
+  const payload = { name, phoneNumber, smsOptIn };
+  if (currentPassword || newPassword) {
+    if (!currentPassword || !newPassword) {
+      alert('Please fill in both current and new password to change your password.');
+      return;
+    }
+    payload.currentPassword = currentPassword;
+    payload.newPassword = newPassword;
+  }
+
+  try {
+    const data = await api('/api/users/me', { method: 'PUT', body: JSON.stringify(payload) });
+    if (state.user) {
+      state.user.name = data.user.name;
+      state.user.phoneNumber = data.user.phoneNumber;
+      state.user.smsOptIn = data.user.smsOptIn;
+    }
+    els.profileCurrentPassword.value = '';
+    els.profileNewPassword.value = '';
+    els.profileSaveMsg.style.display = '';
+    setTimeout(() => { els.profileSaveMsg.style.display = 'none'; }, 2000);
+    render();
+  } catch (err) {
+    alert(err.message);
+  }
 });
 
 els.listToggle.addEventListener('click', () => { state.view = 'list'; render(); });

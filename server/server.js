@@ -2904,12 +2904,12 @@ app.get('/api/users/me', authMiddleware, (req, res) => {
   res.json({ user: safeUser });
 });
 
-app.put('/api/users/me', authMiddleware, (req, res) => {
+app.put('/api/users/me', authMiddleware, async (req, res) => {
   const users = readUsers();
   const userRecord = Object.values(users).find((u) => u.id === req.user.sub);
   if (!userRecord) return res.status(404).json({ error: 'User not found' });
 
-  const { phoneNumber, smsOptIn, name } = req.body;
+  const { phoneNumber, smsOptIn, name, currentPassword, newPassword } = req.body;
   if (phoneNumber !== undefined) {
     const cleaned = String(phoneNumber).replace(/[^\d+]/g, '');
     userRecord.phoneNumber = cleaned || null;
@@ -2917,6 +2917,18 @@ app.put('/api/users/me', authMiddleware, (req, res) => {
   if (smsOptIn !== undefined) userRecord.smsOptIn = Boolean(smsOptIn);
   if (name !== undefined && typeof name === 'string' && name.trim()) {
     userRecord.name = name.trim();
+  }
+
+  if (currentPassword !== undefined || newPassword !== undefined) {
+    if (!currentPassword || !newPassword) {
+      return res.status(400).json({ error: 'Both current and new password are required to change password.' });
+    }
+    if (typeof newPassword !== 'string' || newPassword.length < 6) {
+      return res.status(400).json({ error: 'New password must be at least 6 characters.' });
+    }
+    const match = await bcrypt.compare(currentPassword, userRecord.passwordHash);
+    if (!match) return res.status(400).json({ error: 'Current password is incorrect.' });
+    userRecord.passwordHash = await bcrypt.hash(newPassword, 10);
   }
 
   users[userRecord.email] = userRecord;
