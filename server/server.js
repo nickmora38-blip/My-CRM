@@ -57,7 +57,7 @@ const TWILIO_FROM_NUMBER = process.env.TWILIO_FROM_NUMBER || '';
 const SMS_CONFIGURED = !!(TWILIO_ACCOUNT_SID && TWILIO_AUTH_TOKEN && TWILIO_FROM_NUMBER);
 const twilioClient = SMS_CONFIGURED ? twilio(TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN) : null;
 const crmConfig = require('./config');
-const { ensureDirectories, initializeDataFiles } = require('./setup');
+const { ensureDirectories, initializeDataFiles, seedDataFiles } = require('./setup');
 const DATA_DIR = crmConfig.dataDir;
 const LEADS_FILE = crmConfig.leadsFile;
 const USERS_FILE = crmConfig.usersFile;
@@ -248,6 +248,7 @@ const PHASE1_HOURS = [7, 11, 15, 19]; // 7am, 11am, 3pm, 7pm
 // Ensure data directories and files exist
 ensureDirectories();
 initializeDataFiles();
+seedDataFiles();
 
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
@@ -1794,6 +1795,17 @@ app.put('/api/admin/leads/:id/transfer', (req, res) => {
   writeLeads(leads);
 
   res.json({ lead: leads[idx] });
+});
+
+// POST /api/admin/reseed — reload seed data from repository JSON files (admin only)
+app.post('/api/admin/reseed', (req, res) => {
+  try {
+    const count = seedDataFiles({ force: true });
+    res.json({ message: `Reseed complete. ${count} file(s) reloaded from repository.`, reseeded: count });
+  } catch (err) {
+    console.error('❌ Reseed failed:', err);
+    res.status(500).json({ error: 'Reseed failed', details: err.message });
+  }
 });
 
 // ─── Contacts routes ──────────────────────────────────────────────────────────
