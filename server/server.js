@@ -56,20 +56,22 @@ const TWILIO_AUTH_TOKEN = process.env.TWILIO_AUTH_TOKEN || '';
 const TWILIO_FROM_NUMBER = process.env.TWILIO_FROM_NUMBER || '';
 const SMS_CONFIGURED = !!(TWILIO_ACCOUNT_SID && TWILIO_AUTH_TOKEN && TWILIO_FROM_NUMBER);
 const twilioClient = SMS_CONFIGURED ? twilio(TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN) : null;
-const DATA_DIR = process.env.DATA_DIR_OVERRIDE || path.join(__dirname, 'data');
-const LEADS_FILE = path.join(DATA_DIR, 'leads.json');
-const USERS_FILE = path.join(DATA_DIR, 'users.json');
-const TEMPLATES_FILE = path.join(DATA_DIR, 'emailTemplates.json');
-const TASKS_FILE = path.join(DATA_DIR, 'tasks.json');
-const CONTACTS_FILE = path.join(DATA_DIR, 'contacts.json');
-const ACTIVE_CUSTOMERS_FILE = path.join(DATA_DIR, 'activeCustomers.json');
-const DEAL_TRACKERS_FILE = path.join(DATA_DIR, 'dealTrackers.json');
-const DEALER_APPS_FILE = path.join(DATA_DIR, 'dealerApplications.json');
-const CLOSING_DOCS_FILE = path.join(DATA_DIR, 'closingDocs.json');
-const SETTINGS_FILE = path.join(DATA_DIR, 'settings.json');
-const DOCUMENTS_DIR = path.join(DATA_DIR, 'documents');
-const PUSH_SUBSCRIPTIONS_FILE = path.join(DATA_DIR, 'pushSubscriptions.json');
-const DEAL_PIPELINE_FILE = path.join(DATA_DIR, 'dealPipeline.json');
+const crmConfig = require('./config');
+const { ensureDirectories, initializeDataFiles } = require('./setup');
+const DATA_DIR = crmConfig.dataDir;
+const LEADS_FILE = crmConfig.leadsFile;
+const USERS_FILE = crmConfig.usersFile;
+const TEMPLATES_FILE = crmConfig.emailTemplatesFile;
+const TASKS_FILE = crmConfig.tasksFile;
+const CONTACTS_FILE = crmConfig.contactsFile;
+const ACTIVE_CUSTOMERS_FILE = crmConfig.activeCustomersFile;
+const DEAL_TRACKERS_FILE = crmConfig.dealTrackersFile;
+const DEALER_APPS_FILE = crmConfig.dealerAppsFile;
+const CLOSING_DOCS_FILE = crmConfig.closingDocsFile;
+const SETTINGS_FILE = crmConfig.settingsFile;
+const DOCUMENTS_DIR = crmConfig.documentsDir;
+const PUSH_SUBSCRIPTIONS_FILE = crmConfig.pushSubscriptionsFile;
+const DEAL_PIPELINE_FILE = crmConfig.dealPipelineFile;
 
 // Warn if running in production with default secret
 if (NODE_ENV === 'production' && process.env.JWT_SECRET === undefined) {
@@ -243,13 +245,9 @@ function buildApplicationDocumentBase64(application) {
 // Day 16: mark dead
 const PHASE1_HOURS = [7, 11, 15, 19]; // 7am, 11am, 3pm, 7pm
 
-// Ensure data directory exists
-if (!fs.existsSync(DATA_DIR)) {
-  fs.mkdirSync(DATA_DIR, { recursive: true });
-}
-if (!fs.existsSync(DOCUMENTS_DIR)) {
-  fs.mkdirSync(DOCUMENTS_DIR, { recursive: true });
-}
+// Ensure data directories and files exist
+ensureDirectories();
+initializeDataFiles();
 
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
@@ -2830,6 +2828,10 @@ app.get('/health', (req, res) => {
   res.status(200).json({ status: 'ok' });
 });
 
+// ─── Document upload/download ─────────────────────────────────────────────────
+
+app.use('/api/documents', require('./routes/documents'));
+
 // ─── Static + SPA fallback ────────────────────────────────────────────────────
 
 app.use(express.static(path.join(__dirname, '..', 'public')));
@@ -2853,7 +2855,7 @@ if (require.main === module) {
     console.log(`✅ CRM server running on http://localhost:${PORT}`);
     console.log(`📋 Environment: ${NODE_ENV}`);
     console.log(`🔐 Auth: JWT (${JWT_SECRET === 'dev-only-secret-change-in-production' ? 'default secret' : 'custom secret'})`);
-    console.log(`💾 Data: ${LEADS_FILE}`);
+    console.log(`📁 Data directory: ${DATA_DIR}`);
   });
 }
 
