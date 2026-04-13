@@ -4,6 +4,16 @@ const fs = require('fs');
 const path = require('path');
 const config = require('./config');
 
+// Repository seed data lives alongside this file in server/data/
+const REPO_DATA_DIR = path.join(__dirname, 'data');
+
+// Files to seed from the repository data directory when the active file is empty
+const SEED_FILES = [
+  { name: 'dealPipeline.json', configKey: 'dealPipelineFile' },
+  { name: 'activeCustomers.json', configKey: 'activeCustomersFile' },
+  { name: 'contacts.json', configKey: 'contactsFile' },
+];
+
 function ensureDirectories() {
   const dirs = [
     config.dataDir,
@@ -45,6 +55,50 @@ function initializeDataFiles() {
   });
 }
 
+/**
+ * Seed active data files from the repository JSON files when the active file
+ * is empty (i.e. just initialized or wiped by ephemeral storage on Render).
+ * Pass force=true to overwrite existing data (used by the admin reseed endpoint).
+ * Returns the number of files that were seeded.
+ */
+function seedDataFiles({ force = false } = {}) {
+  let seeded = 0;
+
+  const isEmpty = (d) => (Array.isArray(d) ? d.length === 0 : Object.keys(d).length === 0);
+
+  SEED_FILES.forEach(({ name, configKey }) => {
+    const srcPath = path.join(REPO_DATA_DIR, name);
+    const destPath = config[configKey];
+
+    if (!fs.existsSync(srcPath)) return;
+
+    let srcData;
+    try {
+      srcData = JSON.parse(fs.readFileSync(srcPath, 'utf8'));
+    } catch (e) {
+      console.warn(`⚠️  Could not parse seed file ${name}: ${e.message}`);
+      return;
+    }
+
+    if (isEmpty(srcData)) return;
+
+    let destData;
+    try {
+      destData = JSON.parse(fs.readFileSync(destPath, 'utf8'));
+    } catch {
+      destData = Array.isArray(srcData) ? [] : {};
+    }
+
+    if (force || isEmpty(destData)) {
+      fs.writeFileSync(destPath, JSON.stringify(srcData, null, 2));
+      console.log(`✓ Seeded ${name} with ${Array.isArray(srcData) ? srcData.length : Object.keys(srcData).length} record(s) from repository`);
+      seeded++;
+    }
+  });
+
+  return seeded;
+}
+
 function setup() {
   console.log('🚀 Setting up CRM local environment...');
   console.log(`📁 Data directory: ${config.dataDir}\n`);
@@ -52,6 +106,7 @@ function setup() {
   try {
     ensureDirectories();
     initializeDataFiles();
+    seedDataFiles();
     console.log('\n✅ Setup complete! Your CRM is ready to run.');
     console.log(`\n📊 Data stored at: ${config.dataDir}`);
   } catch (error) {
@@ -64,4 +119,4 @@ if (require.main === module) {
   setup();
 }
 
-module.exports = { setup, ensureDirectories, initializeDataFiles };
+module.exports = { setup, ensureDirectories, initializeDataFiles, seedDataFiles };
