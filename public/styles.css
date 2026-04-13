@@ -1234,3 +1234,137 @@ code {
   border-radius: 6px;
   flex-shrink: 0;
 }
+
+/* ── Deal Pipeline: inline status select ─────────────────────────────────── */
+.deal-status-inline {
+  font-size: 0.78rem;
+  padding: 2px 4px;
+  border-radius: 4px;
+  border: 1px solid rgba(255,255,255,0.2);
+  background: rgba(255,255,255,0.06);
+  color: var(--text);
+  cursor: pointer;
+  max-width: 180px;
+}
+
+.deal-status-cell {
+  white-space: nowrap;
+}
+
+.deal-notes-cell {
+  font-size: 0.8rem;
+  max-width: 220px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.deal-customer-link {
+  color: var(--primary);
+  text-decoration: none;
+  font-weight: 600;
+}
+.deal-customer-link:hover {
+  text-decoration: underline;
+}
+
+/* ── Deal Detail Modal ───────────────────────────────────────────────────── */
+.detail-field {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.detail-label {
+  font-size: 0.75rem;
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+.detail-value {
+  font-size: 0.9rem;
+  font-weight: 500;
+}
+
+/* ── Print styles for Deal Pipeline ─────────────────────────────────────── */
+@media print {
+  body.printing-deal-pipeline * {
+    visibility: hidden;
+  }
+  body.printing-deal-pipeline #deal-pipeline-panel,
+  body.printing-deal-pipeline #deal-pipeline-panel * {
+    visibility: visible;
+  }
+  body.printing-deal-pipeline #deal-pipeline-panel {
+    position: absolute;
+    inset: 0;
+    margin: 0;
+    padding: 12px;
+    background: #fff;
+    color: #000;
+  }
+  body.printing-deal-pipeline .toolbar-actions {
+    display: none !important;
+  }
+  body.printing-deal-pipeline .deal-pipeline-table {
+    font-size: 0.72rem;
+    min-width: unset;
+    width: 100%;
+    border-collapse: collapse;
+  }
+  body.printing-deal-pipeline .deal-pipeline-table th,
+  body.printing-deal-pipeline .deal-pipeline-table td {
+    border: 1px solid #aaa;
+    padding: 4px 6px;
+    color: #000;
+    background: transparent !important;
+  }
+  body.printing-deal-pipeline .deal-pipeline-table th {
+    background: #f0f0f0 !important;
+    font-weight: 700;
+  }
+  body.printing-deal-pipeline .pipeline-row-green td {
+    background: #d4edda !important;
+  }
+  body.printing-deal-pipeline .pipeline-row-yellow td {
+    background: #fff3cd !important;
+  }
+  body.printing-deal-pipeline .pipeline-row-red td {
+    background: #f8d7da !important;
+  }
+  body.printing-deal-pipeline .deal-sp-badge {
+    background: #dc143c;
+    color: #fff;
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
+  body.printing-deal-pipeline .deal-status-inline {
+    border: none;
+    background: transparent;
+    color: #000;
+    font-size: 0.72rem;
+    pointer-events: none;
+    -webkit-appearance: none;
+    appearance: none;
+    padding: 0;
+  }
+  body.printing-deal-pipeline .deal-notes-cell {
+    max-width: none;
+    white-space: normal;
+    overflow: visible;
+  }
+  /* EMH watermark on print */
+  body.printing-deal-pipeline::after {
+    content: '';
+    display: block;
+    position: fixed;
+    inset: 0;
+    background-image: url('/assets/emh-logo.png');
+    background-repeat: no-repeat;
+    background-position: center center;
+    background-size: 400px auto;
+    opacity: 0.06;
+    pointer-events: none;
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
+}

@@ -11,7 +11,8 @@
     "homeType": "U/S",
     "notes": "pending 401K",
     "createdAt": "2026-04-06T00:00:00.000Z",
-    "updatedAt": "2026-04-06T00:00:00.000Z"
+    "updatedAt": "2026-04-06T00:00:00.000Z",
+    "conditionsCleared": false
   },
   {
     "id": "dp_2026_04_002",
@@ -25,7 +26,8 @@
     "homeType": "R/S",
     "notes": "Pending Updated Down Payment",
     "createdAt": "2026-04-06T00:00:00.000Z",
-    "updatedAt": "2026-04-06T00:00:00.000Z"
+    "updatedAt": "2026-04-06T00:00:00.000Z",
+    "conditionsCleared": false
   },
   {
     "id": "dp_2026_04_003",
@@ -39,7 +41,8 @@
     "homeType": "R/S",
     "notes": "pending appraisal",
     "createdAt": "2026-04-06T00:00:00.000Z",
-    "updatedAt": "2026-04-06T00:00:00.000Z"
+    "updatedAt": "2026-04-06T00:00:00.000Z",
+    "conditionsCleared": false
   },
   {
     "id": "dp_2026_04_004",
@@ -53,7 +56,8 @@
     "homeType": "N/O",
     "notes": "pending close",
     "createdAt": "2026-04-06T00:00:00.000Z",
-    "updatedAt": "2026-04-06T00:00:00.000Z"
+    "updatedAt": "2026-04-06T00:00:00.000Z",
+    "conditionsCleared": false
   },
   {
     "id": "dp_2026_04_005",
@@ -67,7 +71,8 @@
     "homeType": "U/S",
     "notes": "pending clear to close",
     "createdAt": "2026-04-06T00:00:00.000Z",
-    "updatedAt": "2026-04-06T00:00:00.000Z"
+    "updatedAt": "2026-04-06T00:00:00.000Z",
+    "conditionsCleared": false
   },
   {
     "id": "dp_2026_04_006",
@@ -81,7 +86,8 @@
     "homeType": "N/O",
     "notes": "Close Scheduled",
     "createdAt": "2026-04-06T00:00:00.000Z",
-    "updatedAt": "2026-04-06T00:00:00.000Z"
+    "updatedAt": "2026-04-06T00:00:00.000Z",
+    "conditionsCleared": false
   },
   {
     "id": "dp_2026_04_007",
@@ -95,7 +101,8 @@
     "homeType": "N/O",
     "notes": "pending clear to close",
     "createdAt": "2026-04-06T00:00:00.000Z",
-    "updatedAt": "2026-04-06T00:00:00.000Z"
+    "updatedAt": "2026-04-06T00:00:00.000Z",
+    "conditionsCleared": false
   },
   {
     "id": "dp_2026_04_008",
@@ -109,7 +116,8 @@
     "homeType": "R/S",
     "notes": "Closed/Pending Delivery",
     "createdAt": "2026-04-06T00:00:00.000Z",
-    "updatedAt": "2026-04-06T00:00:00.000Z"
+    "updatedAt": "2026-04-06T00:00:00.000Z",
+    "conditionsCleared": false
   },
   {
     "id": "dp_2026_04_009",
@@ -123,7 +131,8 @@
     "homeType": "R/S",
     "notes": "Pending BPO",
     "createdAt": "2026-04-06T00:00:00.000Z",
-    "updatedAt": "2026-04-06T00:00:00.000Z"
+    "updatedAt": "2026-04-06T00:00:00.000Z",
+    "conditionsCleared": false
   },
   {
     "id": "dp_2026_04_010",
@@ -137,7 +146,8 @@
     "homeType": "R/S",
     "notes": "Closing",
     "createdAt": "2026-04-06T00:00:00.000Z",
-    "updatedAt": "2026-04-06T00:00:00.000Z"
+    "updatedAt": "2026-04-06T00:00:00.000Z",
+    "conditionsCleared": false
   },
   {
     "id": "dp_2026_04_011",
@@ -151,7 +161,8 @@
     "homeType": "N/S",
     "notes": "Pending VOE and Home Spec",
     "createdAt": "2026-04-06T00:00:00.000Z",
-    "updatedAt": "2026-04-06T00:00:00.000Z"
+    "updatedAt": "2026-04-06T00:00:00.000Z",
+    "conditionsCleared": false
   },
   {
     "id": "dp_2026_04_012",
@@ -165,7 +176,8 @@
     "homeType": "N/O",
     "notes": "Pending Close Docs",
     "createdAt": "2026-04-06T00:00:00.000Z",
-    "updatedAt": "2026-04-06T00:00:00.000Z"
+    "updatedAt": "2026-04-06T00:00:00.000Z",
+    "conditionsCleared": false
   },
   {
     "id": "dp_2026_04_013",
@@ -179,7 +191,8 @@
     "homeType": "U/S",
     "notes": "Closed/Pending Delivery",
     "createdAt": "2026-04-06T00:00:00.000Z",
-    "updatedAt": "2026-04-06T00:00:00.000Z"
+    "updatedAt": "2026-04-06T00:00:00.000Z",
+    "conditionsCleared": false
   },
   {
     "id": "dp_2026_04_014",
@@ -193,7 +206,8 @@
     "homeType": "N/O",
     "notes": "Pending Bank option",
     "createdAt": "2026-04-06T00:00:00.000Z",
-    "updatedAt": "2026-04-06T00:00:00.000Z"
+    "updatedAt": "2026-04-06T00:00:00.000Z",
+    "conditionsCleared": false
   },
   {
     "id": "dp_2026_04_015",
@@ -207,7 +221,8 @@
     "homeType": "N/O",
     "notes": "Pending conditions",
     "createdAt": "2026-04-06T00:00:00.000Z",
-    "updatedAt": "2026-04-06T00:00:00.000Z"
+    "updatedAt": "2026-04-06T00:00:00.000Z",
+    "conditionsCleared": false
   },
   {
     "id": "dp_2026_04_016",
@@ -221,7 +236,8 @@
     "homeType": "N/S",
     "notes": "Pending Land Gift Letter",
     "createdAt": "2026-04-06T00:00:00.000Z",
-    "updatedAt": "2026-04-06T00:00:00.000Z"
+    "updatedAt": "2026-04-06T00:00:00.000Z",
+    "conditionsCleared": false
   },
   {
     "id": "dp_2026_04_017",
@@ -235,7 +251,8 @@
     "homeType": "N/O",
     "notes": "Clear Conditions",
     "createdAt": "2026-04-06T00:00:00.000Z",
-    "updatedAt": "2026-04-06T00:00:00.000Z"
+    "updatedAt": "2026-04-06T00:00:00.000Z",
+    "conditionsCleared": false
   },
   {
     "id": "dp_2026_04_018",
@@ -249,7 +266,8 @@
     "homeType": "N/O",
     "notes": "Pending approvals",
     "createdAt": "2026-04-06T00:00:00.000Z",
-    "updatedAt": "2026-04-06T00:00:00.000Z"
+    "updatedAt": "2026-04-06T00:00:00.000Z",
+    "conditionsCleared": false
   },
   {
     "id": "dp_2026_04_019",
@@ -263,7 +281,8 @@
     "homeType": "N/S",
     "notes": "Pending updated approval",
     "createdAt": "2026-04-06T00:00:00.000Z",
-    "updatedAt": "2026-04-06T00:00:00.000Z"
+    "updatedAt": "2026-04-06T00:00:00.000Z",
+    "conditionsCleared": false
   },
   {
     "id": "dp_2026_04_020",
@@ -277,6 +296,7 @@
     "homeType": "N/S",
     "notes": "Pending updated approval",
     "createdAt": "2026-04-06T00:00:00.000Z",
-    "updatedAt": "2026-04-06T00:00:00.000Z"
+    "updatedAt": "2026-04-06T00:00:00.000Z",
+    "conditionsCleared": false
   }
 ]

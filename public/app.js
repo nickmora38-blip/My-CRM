@@ -191,6 +191,10 @@ const els = {
   dealPipelineFilterLender: document.getElementById('deal-pipeline-filter-lender'),
   dealPipelineSearch: document.getElementById('deal-pipeline-search'),
   dealPipelineExportBtn: document.getElementById('deal-pipeline-export-btn'),
+  dealPipelinePrintBtn: document.getElementById('deal-pipeline-print-btn'),
+  // Deal detail modal
+  dealDetailModal: document.getElementById('deal-detail-modal'),
+  dealDetailContent: document.getElementById('deal-detail-content'),
   // Contact modal
   contactModal: document.getElementById('contact-modal'),
   contactModalTitle: document.getElementById('contact-modal-title'),
@@ -3210,6 +3214,14 @@ async function loadDealPipeline() {
   }
 }
 
+const DEAL_PIPELINE_STATUSES = [
+  'Pending Conditions', 'Pending Updated Approval', 'Pending Approvals', 'Pending Bank Option',
+  'Pending Land Gift Letter', 'Pending 401K', 'Pending Updated Down Payment', 'Pending Appraisal',
+  'Pending BPO', 'Pending VOE and Home Spec', 'Pending Close', 'Pending Clear to Close',
+  'Pending Close Docs', 'Clear Conditions', 'Clear to Close', 'Close Scheduled', 'Closing',
+  'Closed/Pending Delivery', 'Funded', 'Complete'
+];
+
 function getDealPipelineRowColor(dealStatus) {
   const closed = ['Closed/Pending Delivery', 'Close Scheduled', 'Closing'];
   const nearClose = ['Pending Close', 'Pending Clear to Close', 'Pending Close Docs', 'Clear Conditions', 'Clear to Close'];
@@ -3254,19 +3266,32 @@ function renderDealPipelinePanel() {
     return;
   }
 
-  const headers = ['Salesperson', 'Customer', 'Home Model', 'Price', 'Lender', 'Status', 'Type', 'Notes'];
+  const isAdmin = currentUserIsAdmin();
+  const headers = ['SP', 'Customer', 'Home Model', 'Price', 'Lender', 'Status', 'Type', 'Cond.', 'Notes', 'Month'];
+
+  const statusOptions = DEAL_PIPELINE_STATUSES.map((s) =>
+    `<option value="${escHtml(s)}">${escHtml(s)}</option>`
+  ).join('');
 
   const rows = deals.map((d) => {
     const rowClass = getDealPipelineRowColor(d.dealStatus);
-    return `<tr class="${rowClass}">
+    const condChecked = d.conditionsCleared ? 'checked' : '';
+    const editAttrs = isAdmin ? '' : ' disabled';
+    return `<tr class="${rowClass}" data-deal-id="${escHtml(d.id)}">
       <td><span class="deal-sp-badge">${escHtml(d.salesperson || '-')}</span></td>
-      <td><strong>${escHtml(d.customerName || '-')}</strong></td>
+      <td><a href="#" class="deal-customer-link" data-deal-id="${escHtml(d.id)}">${escHtml(d.customerName || '-')}</a></td>
       <td>${escHtml(d.homeModel || '-')}</td>
       <td style="text-align:right;white-space:nowrap">${d.price ? currency(d.price) : '-'}</td>
       <td>${escHtml(d.lender || '-')}</td>
-      <td><span class="deal-status-badge">${escHtml(d.dealStatus || '-')}</span></td>
+      <td class="deal-status-cell">
+        ${isAdmin
+    ? `<select class="deal-status-inline" data-deal-id="${escHtml(d.id)}">${DEAL_PIPELINE_STATUSES.map((s) => `<option value="${escHtml(s)}"${d.dealStatus === s ? ' selected' : ''}>${escHtml(s)}</option>`).join('')}</select>`
+    : `<span class="deal-status-badge">${escHtml(d.dealStatus || '-')}</span>`}
+      </td>
       <td>${escHtml(d.homeType || '-')}</td>
-      <td class="muted" style="font-size:0.8rem">${escHtml(d.notes || '-')}</td>
+      <td style="text-align:center"><input type="checkbox" class="deal-cond-checkbox" data-deal-id="${escHtml(d.id)}" ${condChecked}${editAttrs} title="Conditions Cleared" /></td>
+      <td class="muted deal-notes-cell">${escHtml(d.notes || '-')}</td>
+      <td class="muted" style="white-space:nowrap">${escHtml(d.month || '-')}</td>
     </tr>`;
   }).join('');
 
@@ -3276,13 +3301,158 @@ function renderDealPipelinePanel() {
       <tbody>${rows}</tbody>
     </table>
   `;
+
+  // Attach click handlers for customer links
+  els.dealPipelineContent.querySelectorAll('.deal-customer-link').forEach((link) => {
+    link.addEventListener('click', (e) => {
+      e.preventDefault();
+      openDealDetailModal(link.dataset.dealId);
+    });
+  });
+
+  // Attach change handlers for inline status dropdowns (admin only)
+  if (isAdmin) {
+    els.dealPipelineContent.querySelectorAll('.deal-status-inline').forEach((sel) => {
+      sel.addEventListener('change', async (e) => {
+        const dealId = sel.dataset.dealId;
+        const newStatus = sel.value;
+        try {
+          await updateDealField(dealId, { dealStatus: newStatus });
+          const deal = state.dealPipeline.find((d) => d.id === dealId);
+          if (deal) {
+            deal.dealStatus = newStatus;
+            const row = els.dealPipelineContent.querySelector(`tr[data-deal-id="${dealId}"]`);
+            if (row) {
+              row.className = getDealPipelineRowColor(newStatus);
+              row.dataset.dealId = dealId;
+            }
+          }
+        } catch (err) {
+          alert('Failed to update status: ' + err.message);
+          renderDealPipelinePanel();
+        }
+      });
+    });
+
+    // Attach change handlers for conditions cleared checkboxes
+    els.dealPipelineContent.querySelectorAll('.deal-cond-checkbox').forEach((cb) => {
+      cb.addEventListener('change', async () => {
+        const dealId = cb.dataset.dealId;
+        try {
+          await updateDealField(dealId, { conditionsCleared: cb.checked });
+          const deal = state.dealPipeline.find((d) => d.id === dealId);
+          if (deal) deal.conditionsCleared = cb.checked;
+        } catch (err) {
+          alert('Failed to update conditions: ' + err.message);
+          cb.checked = !cb.checked;
+        }
+      });
+    });
+  }
+}
+
+async function updateDealField(dealId, patch) {
+  const updated = await api(`/api/deal-pipeline/${dealId}`, {
+    method: 'PUT',
+    body: JSON.stringify(patch)
+  });
+  const idx = state.dealPipeline.findIndex((d) => d.id === dealId);
+  if (idx !== -1) state.dealPipeline[idx] = updated;
+  return updated;
+}
+
+function openDealDetailModal(dealId) {
+  const deal = state.dealPipeline.find((d) => d.id === dealId);
+  if (!deal) return;
+  const isAdmin = currentUserIsAdmin();
+
+  const statusOptions = DEAL_PIPELINE_STATUSES.map((s) =>
+    `<option value="${escHtml(s)}"${deal.dealStatus === s ? ' selected' : ''}>${escHtml(s)}</option>`
+  ).join('');
+
+  els.dealDetailContent.innerHTML = `
+    <div class="toolbar" style="margin-bottom:16px">
+      <div>
+        <h3 style="margin:0">${escHtml(deal.customerName || '-')}</h3>
+        <p class="muted" style="margin:4px 0 0">Salesperson: <strong>${escHtml(deal.salesperson || '-')}</strong> &nbsp;|&nbsp; ${escHtml(deal.month || '')}</p>
+      </div>
+      <button type="button" id="deal-detail-close-btn" class="icon-btn">✕</button>
+    </div>
+
+    <div class="grid two-col" style="gap:12px;margin-bottom:16px">
+      <div class="detail-field"><span class="detail-label">Home Model</span><span class="detail-value">${escHtml(deal.homeModel || '-')}</span></div>
+      <div class="detail-field"><span class="detail-label">Price</span><span class="detail-value">${deal.price ? currency(deal.price) : '-'}</span></div>
+      <div class="detail-field"><span class="detail-label">Lender</span><span class="detail-value">${escHtml(deal.lender || '-')}</span></div>
+      <div class="detail-field"><span class="detail-label">Home Type</span><span class="detail-value">${escHtml(deal.homeType || '-')}</span></div>
+    </div>
+
+    <div style="margin-bottom:14px">
+      <label class="detail-label" style="display:block;margin-bottom:4px">Deal Status</label>
+      ${isAdmin
+    ? `<select id="deal-detail-status-sel" style="width:100%;font-size:0.9rem">${statusOptions}</select>`
+    : `<span class="deal-status-badge" style="font-size:0.9rem">${escHtml(deal.dealStatus || '-')}</span>`}
+    </div>
+
+    <div style="margin-bottom:14px;display:flex;align-items:center;gap:10px">
+      <label class="detail-label" style="margin:0">Conditions Cleared</label>
+      <input type="checkbox" id="deal-detail-cond-cb" ${deal.conditionsCleared ? 'checked' : ''} ${isAdmin ? '' : 'disabled'} />
+      <span id="deal-detail-cond-label" style="font-size:0.85rem;color:${deal.conditionsCleared ? '#22c55e' : 'var(--muted)'}">${deal.conditionsCleared ? '✅ Cleared' : 'Pending'}</span>
+    </div>
+
+    <div style="margin-bottom:14px">
+      <span class="detail-label" style="display:block;margin-bottom:4px">Notes / Conditions</span>
+      <p style="margin:0;font-size:0.88rem;background:rgba(255,255,255,0.04);padding:10px;border-radius:6px;white-space:pre-wrap">${escHtml(deal.notes || 'No notes.')}</p>
+    </div>
+
+    <div style="font-size:0.78rem;color:var(--muted);margin-top:8px">
+      Last updated: ${deal.updatedAt ? new Date(deal.updatedAt).toLocaleString() : '-'}
+    </div>
+
+    <menu style="margin-top:16px">
+      <button type="button" id="deal-detail-close-btn2">Close</button>
+    </menu>
+  `;
+
+  const closeModal = () => els.dealDetailModal.close();
+  els.dealDetailContent.querySelector('#deal-detail-close-btn').addEventListener('click', closeModal);
+  els.dealDetailContent.querySelector('#deal-detail-close-btn2').addEventListener('click', closeModal);
+
+  if (isAdmin) {
+    const statusSel = els.dealDetailContent.querySelector('#deal-detail-status-sel');
+    statusSel && statusSel.addEventListener('change', async () => {
+      try {
+        await updateDealField(deal.id, { dealStatus: statusSel.value });
+        deal.dealStatus = statusSel.value;
+        renderDealPipelinePanel();
+      } catch (err) {
+        alert('Failed to update status: ' + err.message);
+      }
+    });
+
+    const condCb = els.dealDetailContent.querySelector('#deal-detail-cond-cb');
+    const condLabel = els.dealDetailContent.querySelector('#deal-detail-cond-label');
+    condCb && condCb.addEventListener('change', async () => {
+      try {
+        await updateDealField(deal.id, { conditionsCleared: condCb.checked });
+        deal.conditionsCleared = condCb.checked;
+        condLabel.textContent = condCb.checked ? '✅ Cleared' : 'Pending';
+        condLabel.style.color = condCb.checked ? '#22c55e' : 'var(--muted)';
+        renderDealPipelinePanel();
+      } catch (err) {
+        alert('Failed to update conditions: ' + err.message);
+        condCb.checked = !condCb.checked;
+      }
+    });
+  }
+
+  els.dealDetailModal.showModal();
 }
 
 function exportDealPipelineCsv() {
   const deals = state.dealPipeline;
-  const headers = ['Salesperson', 'Customer', 'Home Model', 'Price', 'Lender', 'Status', 'Home Type', 'Notes', 'Month'];
+  const headers = ['Salesperson', 'Customer', 'Home Model', 'Price', 'Lender', 'Status', 'Home Type', 'Conditions Cleared', 'Notes', 'Month'];
   const rows = deals.map((d) => [
-    d.salesperson, d.customerName, d.homeModel, d.price, d.lender, d.dealStatus, d.homeType, d.notes, d.month
+    d.salesperson, d.customerName, d.homeModel, d.price, d.lender, d.dealStatus, d.homeType, d.conditionsCleared ? 'Yes' : 'No', d.notes, d.month
   ]);
   exportTableToCsv(headers, rows, 'deal-pipeline-april-2026.csv');
 }
@@ -3465,6 +3635,11 @@ els.dealPipelineSearch.addEventListener('input', (e) => {
   renderDealPipelinePanel();
 });
 els.dealPipelineExportBtn.addEventListener('click', exportDealPipelineCsv);
+els.dealPipelinePrintBtn.addEventListener('click', () => {
+  document.body.classList.add('printing-deal-pipeline');
+  window.print();
+  document.body.classList.remove('printing-deal-pipeline');
+});
 
 // Reports panel
 els.reportsCloseBtn.addEventListener('click', () => els.reportsPanelEl.classList.add('hidden'));
