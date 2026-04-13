@@ -53,6 +53,27 @@ th {
   animation: rise 280ms ease;
 }
 
+/* ─── EMH logo watermark ──────────────────────────────────────── */
+#app-panel {
+  position: relative;
+}
+
+#app-panel::before {
+  content: '';
+  position: absolute;
+  top: 16px;
+  right: 20px;
+  width: 200px;
+  height: 60px;
+  background-image: url('/assets/emh-logo.png');
+  background-size: contain;
+  background-repeat: no-repeat;
+  background-position: top right;
+  opacity: 0.12;
+  pointer-events: none;
+  z-index: 0;
+}
+
 @keyframes rise {
   from {
     transform: translateY(8px);
