@@ -3,14 +3,18 @@ services:
     name: my-crm
     runtime: node
     buildCommand: npm install
-    startCommand: node server.js
+    startCommand: node server/server.js
     envVars:
       - key: NODE_ENV
         value: production
       - key: DATA_DIR_OVERRIDE
         value: /var/data
+      - key: DATABASE_URL
+        sync: false
       - key: JWT_SECRET
         generateValue: true
+      - key: NMORA_PASSWORD
+        sync: false
       - key: VAPID_PUBLIC_KEY
         sync: false
       - key: VAPID_PRIVATE_KEY
