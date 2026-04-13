@@ -399,3 +399,76 @@ describe('Settings default calcUrl', () => {
   });
 });
 
+// ─── Auth flow ────────────────────────────────────────────────────────────────
+
+describe('Login flow — no DocuSign credentials required', () => {
+  beforeEach(() => {
+    // Ensure DocuSign env vars are unset so we confirm auth does not depend on them
+    delete process.env.DOCUSIGN_INTEGRATION_KEY;
+    delete process.env.DOCUSIGN_SECRET_KEY;
+    delete process.env.DOCUSIGN_ACCOUNT_ID;
+  });
+
+  test('POST /api/auth/login succeeds with demo credentials', async () => {
+    // The server seeds demo@crm.local on first readUsers() call when users.json is empty
+    writeJson(usersFile, {});
+    const res = await request(app)
+      .post('/api/auth/login')
+      .send({ email: 'demo@crm.local', password: 'demo123' });
+    expect(res.status).toBe(200);
+    expect(res.body).toHaveProperty('token');
+    expect(res.body).toHaveProperty('user');
+    expect(res.body.user.email).toBe('demo@crm.local');
+  });
+
+  test('POST /api/auth/login returns 401 for wrong password', async () => {
+    writeJson(usersFile, {});
+    const res = await request(app)
+      .post('/api/auth/login')
+      .send({ email: 'demo@crm.local', password: 'wrong-password' });
+    expect(res.status).toBe(401);
+    expect(res.body).toHaveProperty('error');
+  });
+
+  test('POST /api/auth/login returns 400 when credentials are missing', async () => {
+    const res = await request(app)
+      .post('/api/auth/login')
+      .send({});
+    expect(res.status).toBe(400);
+  });
+
+  test('GET /api/auth/me returns user info with valid token', async () => {
+    writeJson(usersFile, {});
+    const loginRes = await request(app)
+      .post('/api/auth/login')
+      .send({ email: 'demo@crm.local', password: 'demo123' });
+    expect(loginRes.status).toBe(200);
+    const token = loginRes.body.token;
+
+    const meRes = await request(app)
+      .get('/api/auth/me')
+      .set('Authorization', `Bearer ${token}`);
+    expect(meRes.status).toBe(200);
+    expect(meRes.body.user.email).toBe('demo@crm.local');
+  });
+
+  test('GET /api/auth/me returns 401 without a token', async () => {
+    const res = await request(app).get('/api/auth/me');
+    expect(res.status).toBe(401);
+  });
+
+  test('token from login grants access to /api/leads', async () => {
+    writeJson(usersFile, {});
+    const loginRes = await request(app)
+      .post('/api/auth/login')
+      .send({ email: 'demo@crm.local', password: 'demo123' });
+    const token = loginRes.body.token;
+
+    const leadsRes = await request(app)
+      .get('/api/leads')
+      .set('Authorization', `Bearer ${token}`);
+    expect(leadsRes.status).toBe(200);
+    expect(leadsRes.body).toHaveProperty('leads');
+  });
+});
+
