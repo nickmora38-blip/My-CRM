@@ -59,7 +59,11 @@ const state = {
   closingDocs: {},
   settings: { calcUrl: 'https://www.21stmortgage.com/web/21stsite.nsf/calculators#mortgage-calculator' },
   permissionsUserId: null,
-  leadsTabVisible: false
+  leadsTabVisible: false,
+  dealPipeline: [],
+  dealPipelineFilterSp: '',
+  dealPipelineFilterLender: '',
+  dealPipelineSearch: ''
 };
 
 const els = {
@@ -177,6 +181,16 @@ const els = {
   pipelineFilterStatus: document.getElementById('pipeline-filter-status'),
   pipelineFilterLender: document.getElementById('pipeline-filter-lender'),
   pipelineExportCsvBtn: document.getElementById('pipeline-export-csv-btn'),
+  // Deal Pipeline panel
+  dealPipelineBtn: document.getElementById('deal-pipeline-btn'),
+  dealPipelinePanel: document.getElementById('deal-pipeline-panel'),
+  dealPipelineCloseBtn: document.getElementById('deal-pipeline-close-btn'),
+  dealPipelineContent: document.getElementById('deal-pipeline-content'),
+  dealPipelineSummary: document.getElementById('deal-pipeline-summary'),
+  dealPipelineFilterSp: document.getElementById('deal-pipeline-filter-sp'),
+  dealPipelineFilterLender: document.getElementById('deal-pipeline-filter-lender'),
+  dealPipelineSearch: document.getElementById('deal-pipeline-search'),
+  dealPipelineExportBtn: document.getElementById('deal-pipeline-export-btn'),
   // Contact modal
   contactModal: document.getElementById('contact-modal'),
   contactModalTitle: document.getElementById('contact-modal-title'),
@@ -3185,7 +3199,93 @@ function renderPipelineMonthContent() {
   els.pipelineReportContent.appendChild(wrap);
 }
 
-els.loginForm.addEventListener('submit', async (event) => {
+// ─── Deal Pipeline (April 2026) ───────────────────────────────────────────────
+
+async function loadDealPipeline() {
+  try {
+    const deals = await api('/api/deal-pipeline');
+    state.dealPipeline = Array.isArray(deals) ? deals : [];
+  } catch (_) {
+    state.dealPipeline = [];
+  }
+}
+
+function getDealPipelineRowColor(dealStatus) {
+  const closed = ['Closed/Pending Delivery', 'Close Scheduled', 'Closing'];
+  const nearClose = ['Pending Close', 'Pending Clear to Close', 'Pending Close Docs', 'Clear Conditions', 'Clear to Close'];
+  const inProgress = ['Pending Conditions', 'Pending Updated Approval', 'Pending Approvals', 'Pending Bank Option', 'Pending Land Gift Letter'];
+  if (closed.includes(dealStatus)) return 'pipeline-row-green';
+  if (nearClose.includes(dealStatus)) return 'pipeline-row-yellow';
+  if (inProgress.includes(dealStatus)) return 'pipeline-row-red';
+  return '';
+}
+
+function renderDealPipelinePanel() {
+  const search = (state.dealPipelineSearch || '').toLowerCase();
+  const filterSp = state.dealPipelineFilterSp || '';
+  const filterLender = state.dealPipelineFilterLender || '';
+
+  let deals = state.dealPipeline;
+  if (filterSp) deals = deals.filter((d) => d.salesperson === filterSp);
+  if (filterLender) deals = deals.filter((d) => d.lender === filterLender);
+  if (search) {
+    deals = deals.filter((d) =>
+      (d.customerName || '').toLowerCase().includes(search) ||
+      (d.salesperson || '').toLowerCase().includes(search) ||
+      (d.homeModel || '').toLowerCase().includes(search) ||
+      (d.dealStatus || '').toLowerCase().includes(search) ||
+      (d.lender || '').toLowerCase().includes(search)
+    );
+  }
+
+  const totalValue = deals.reduce((sum, d) => sum + (d.price || 0), 0);
+  const grossProfit = 258500; // April 2026 total gross profit
+
+  els.dealPipelineSummary.innerHTML = `
+    <div class="deal-pipeline-stats">
+      <span><strong>${deals.length}</strong> deals shown</span>
+      <span><strong>${currency(totalValue)}</strong> total pipeline value</span>
+      <span class="muted">April 2026 Gross Profit: <strong style="color:#dc143c">${currency(grossProfit)}</strong></span>
+    </div>
+  `;
+
+  if (deals.length === 0) {
+    els.dealPipelineContent.innerHTML = '<p class="muted" style="padding:12px">No deals match the current filters.</p>';
+    return;
+  }
+
+  const headers = ['Salesperson', 'Customer', 'Home Model', 'Price', 'Lender', 'Status', 'Type', 'Notes'];
+
+  const rows = deals.map((d) => {
+    const rowClass = getDealPipelineRowColor(d.dealStatus);
+    return `<tr class="${rowClass}">
+      <td><span class="deal-sp-badge">${escHtml(d.salesperson || '-')}</span></td>
+      <td><strong>${escHtml(d.customerName || '-')}</strong></td>
+      <td>${escHtml(d.homeModel || '-')}</td>
+      <td style="text-align:right;white-space:nowrap">${d.price ? currency(d.price) : '-'}</td>
+      <td>${escHtml(d.lender || '-')}</td>
+      <td><span class="deal-status-badge">${escHtml(d.dealStatus || '-')}</span></td>
+      <td>${escHtml(d.homeType || '-')}</td>
+      <td class="muted" style="font-size:0.8rem">${escHtml(d.notes || '-')}</td>
+    </tr>`;
+  }).join('');
+
+  els.dealPipelineContent.innerHTML = `
+    <table class="pipeline-report-table deal-pipeline-table">
+      <thead><tr>${headers.map((h) => `<th>${escHtml(h)}</th>`).join('')}</tr></thead>
+      <tbody>${rows}</tbody>
+    </table>
+  `;
+}
+
+function exportDealPipelineCsv() {
+  const deals = state.dealPipeline;
+  const headers = ['Salesperson', 'Customer', 'Home Model', 'Price', 'Lender', 'Status', 'Home Type', 'Notes', 'Month'];
+  const rows = deals.map((d) => [
+    d.salesperson, d.customerName, d.homeModel, d.price, d.lender, d.dealStatus, d.homeType, d.notes, d.month
+  ]);
+  exportTableToCsv(headers, rows, 'deal-pipeline-april-2026.csv');
+}
   event.preventDefault();
   const fd = new FormData(els.loginForm);
   try {
@@ -3227,7 +3327,7 @@ els.logoutBtn.addEventListener('click', () => {
 
 function allPanels() {
   return [els.tasksPanel, els.templatesPanel, els.usersPanel, els.contactsPanel,
-    els.activeCustomersPanel, els.pipelinePanel, els.reportsPanelEl,
+    els.activeCustomersPanel, els.pipelinePanel, els.dealPipelinePanel, els.reportsPanelEl,
     els.dealTrackerPanel, els.closingDocsPanel, els.maxAdvancePanel].filter(Boolean);
 }
 
@@ -3334,6 +3434,35 @@ els.pipelineFilterLender.addEventListener('change', (e) => {
   renderPipelineMonthContent();
 });
 els.pipelineExportCsvBtn.addEventListener('click', exportPipelineCsv);
+
+// Deal Pipeline panel
+els.dealPipelineBtn.addEventListener('click', async () => {
+  els.dealPipelinePanel.classList.toggle('hidden');
+  els.tasksPanel.classList.add('hidden');
+  els.templatesPanel.classList.add('hidden');
+  els.usersPanel.classList.add('hidden');
+  els.contactsPanel.classList.add('hidden');
+  els.activeCustomersPanel.classList.add('hidden');
+  els.pipelinePanel.classList.add('hidden');
+  if (!els.dealPipelinePanel.classList.contains('hidden')) {
+    await loadDealPipeline();
+    renderDealPipelinePanel();
+  }
+});
+els.dealPipelineCloseBtn.addEventListener('click', () => els.dealPipelinePanel.classList.add('hidden'));
+els.dealPipelineFilterSp.addEventListener('change', (e) => {
+  state.dealPipelineFilterSp = e.target.value;
+  renderDealPipelinePanel();
+});
+els.dealPipelineFilterLender.addEventListener('change', (e) => {
+  state.dealPipelineFilterLender = e.target.value;
+  renderDealPipelinePanel();
+});
+els.dealPipelineSearch.addEventListener('input', (e) => {
+  state.dealPipelineSearch = e.target.value;
+  renderDealPipelinePanel();
+});
+els.dealPipelineExportBtn.addEventListener('click', exportDealPipelineCsv);
 
 // Reports panel
 els.reportsCloseBtn.addEventListener('click', () => els.reportsPanelEl.classList.add('hidden'));

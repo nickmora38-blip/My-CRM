@@ -62,6 +62,7 @@
             <button id="contacts-btn">👥 Contacts</button>
             <button id="active-customers-btn">⭐ Active Customers</button>
             <button id="pipeline-btn">📊 Pipeline</button>
+            <button id="deal-pipeline-btn">📋 Deal Pipeline</button>
             <button id="leads-tab-btn">🎯 Leads</button>
             <button id="deal-tracker-btn">📋 Deal Tracker</button>
             <button id="closing-docs-btn">📁 Closing Docs</button>
@@ -190,9 +191,40 @@
           <div id="pipeline-report-content"></div>
         </section>
 
-        <!-- Reports Panel -->
-        <section id="reports-panel" class="panel hidden" style="margin-bottom:16px">
+        <!-- Deal Pipeline Panel -->
+        <section id="deal-pipeline-panel" class="panel hidden" style="margin-bottom:16px">
           <div class="toolbar">
+            <h3 style="margin:0">📋 Deal Pipeline — April 2026</h3>
+            <div class="toolbar-actions">
+              <input id="deal-pipeline-search" type="text" placeholder="Search deals…" style="font-size:0.85rem;width:180px" />
+              <select id="deal-pipeline-filter-sp" style="font-size:0.85rem">
+                <option value="">All Salespersons</option>
+                <option>RD</option>
+                <option>JR</option>
+                <option>BC</option>
+                <option>NM</option>
+                <option>TR</option>
+                <option>MGC</option>
+              </select>
+              <select id="deal-pipeline-filter-lender" style="font-size:0.85rem">
+                <option value="">All Lenders</option>
+                <option>21ST Mortgage</option>
+                <option>Calcon</option>
+                <option>Cash</option>
+                <option>CPM</option>
+                <option>Other</option>
+                <option>Unknown</option>
+              </select>
+              <button id="deal-pipeline-export-btn" style="font-size:0.85rem">⬇️ Export CSV</button>
+              <button id="deal-pipeline-close-btn">✕ Close</button>
+            </div>
+          </div>
+          <div id="deal-pipeline-summary" class="deal-pipeline-summary"></div>
+          <div id="deal-pipeline-content" style="overflow-x:auto"></div>
+        </section>
+
+        <!-- Reports Panel -->
+        <section id="reports-panel" class="panel hidden" style="margin-bottom:16px">          <div class="toolbar">
             <h3 style="margin:0">📊 Reports</h3>
             <div class="toolbar-actions">
               <button id="reports-close-btn">✕ Close</button>

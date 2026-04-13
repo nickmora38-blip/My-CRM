@@ -69,6 +69,7 @@ const CLOSING_DOCS_FILE = path.join(DATA_DIR, 'closingDocs.json');
 const SETTINGS_FILE = path.join(DATA_DIR, 'settings.json');
 const DOCUMENTS_DIR = path.join(DATA_DIR, 'documents');
 const PUSH_SUBSCRIPTIONS_FILE = path.join(DATA_DIR, 'pushSubscriptions.json');
+const DEAL_PIPELINE_FILE = path.join(DATA_DIR, 'dealPipeline.json');
 
 // Warn if running in production with default secret
 if (NODE_ENV === 'production' && process.env.JWT_SECRET === undefined) {
@@ -469,6 +470,8 @@ function writeActiveCustomers(customers) {
 }
 function readDealTrackers() { return readJson(DEAL_TRACKERS_FILE, []); }
 function writeDealTrackers(data) { writeJson(DEAL_TRACKERS_FILE, data); }
+function readDealPipeline() { return readJson(DEAL_PIPELINE_FILE, []); }
+function writeDealPipeline(data) { writeJson(DEAL_PIPELINE_FILE, data); }
 function readDealerApps() { return readJson(DEALER_APPS_FILE, []); }
 function writeDealerApps(data) { writeJson(DEALER_APPS_FILE, data); }
 function readClosingDocs() { return readJson(CLOSING_DOCS_FILE, {}); }
@@ -2410,6 +2413,89 @@ app.get('/api/pipeline/monthly', authMiddleware, (req, res) => {
       total: Object.values(monthMap[month]).reduce((s, n) => s + n, 0)
     }))
   });
+});
+
+// ─── Deal Pipeline ────────────────────────────────────────────────────────────
+
+app.use('/api/deal-pipeline', authMiddleware);
+
+app.get('/api/deal-pipeline', (req, res) => {
+  const deals = readDealPipeline();
+  res.json(deals);
+});
+
+app.post('/api/deal-pipeline', (req, res) => {
+  const users = readUsers();
+  const userRecord = Object.values(users).find((u) => u.id === req.user.sub);
+  const isAdmin = isAdminUser(userRecord);
+  if (!isAdmin) return res.status(403).json({ error: 'Admin only' });
+
+  const { salesperson, customerName, homeModel, price, lender, dealStatus, month, homeType, notes } = req.body;
+  if (!customerName || !customerName.trim()) return res.status(400).json({ error: 'customerName is required' });
+
+  const deals = readDealPipeline();
+  const now = new Date().toISOString();
+  const newDeal = {
+    id: `dp_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
+    salesperson: (salesperson || '').trim(),
+    customerName: customerName.trim(),
+    homeModel: (homeModel || '').trim(),
+    price: Number(price) || 0,
+    lender: (lender || '').trim(),
+    dealStatus: (dealStatus || '').trim(),
+    month: (month || '').trim(),
+    homeType: (homeType || '').trim(),
+    notes: (notes || '').trim(),
+    createdBy: req.user.sub,
+    createdByName: userRecord ? userRecord.name : '',
+    createdAt: now,
+    updatedAt: now
+  };
+  deals.push(newDeal);
+  writeDealPipeline(deals);
+  res.status(201).json(newDeal);
+});
+
+app.put('/api/deal-pipeline/:id', (req, res) => {
+  const users = readUsers();
+  const userRecord = Object.values(users).find((u) => u.id === req.user.sub);
+  const isAdmin = isAdminUser(userRecord);
+  if (!isAdmin) return res.status(403).json({ error: 'Admin only' });
+
+  const deals = readDealPipeline();
+  const idx = deals.findIndex((d) => d.id === req.params.id);
+  if (idx === -1) return res.status(404).json({ error: 'Deal not found' });
+
+  const { salesperson, customerName, homeModel, price, lender, dealStatus, month, homeType, notes } = req.body;
+  deals[idx] = {
+    ...deals[idx],
+    salesperson: salesperson !== undefined ? (salesperson || '').trim() : deals[idx].salesperson,
+    customerName: customerName !== undefined ? customerName.trim() : deals[idx].customerName,
+    homeModel: homeModel !== undefined ? (homeModel || '').trim() : deals[idx].homeModel,
+    price: price !== undefined ? (Number(price) || 0) : deals[idx].price,
+    lender: lender !== undefined ? (lender || '').trim() : deals[idx].lender,
+    dealStatus: dealStatus !== undefined ? (dealStatus || '').trim() : deals[idx].dealStatus,
+    month: month !== undefined ? (month || '').trim() : deals[idx].month,
+    homeType: homeType !== undefined ? (homeType || '').trim() : deals[idx].homeType,
+    notes: notes !== undefined ? (notes || '').trim() : deals[idx].notes,
+    updatedAt: new Date().toISOString()
+  };
+  writeDealPipeline(deals);
+  res.json(deals[idx]);
+});
+
+app.delete('/api/deal-pipeline/:id', (req, res) => {
+  const users = readUsers();
+  const userRecord = Object.values(users).find((u) => u.id === req.user.sub);
+  const isAdmin = isAdminUser(userRecord);
+  if (!isAdmin) return res.status(403).json({ error: 'Admin only' });
+
+  const deals = readDealPipeline();
+  const idx = deals.findIndex((d) => d.id === req.params.id);
+  if (idx === -1) return res.status(404).json({ error: 'Deal not found' });
+  deals.splice(idx, 1);
+  writeDealPipeline(deals);
+  res.json({ success: true });
 });
 
 // ─── Deal Trackers ────────────────────────────────────────────────────────────

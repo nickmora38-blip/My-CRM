@@ -7,6 +7,8 @@ services:
     envVars:
       - key: NODE_ENV
         value: production
+      - key: DATA_DIR_OVERRIDE
+        value: /var/data
       - key: JWT_SECRET
         generateValue: true
       # ── Web Push / PWA ─────────────────────────────────────────────────────
@@ -35,3 +37,7 @@ services:
         sync: false
       - key: SMTP_FROM
         sync: false
+    disk:
+      name: crm-data
+      mountPath: /var/data
+      sizeGB: 1
