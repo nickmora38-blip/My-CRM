@@ -2430,7 +2430,7 @@ app.post('/api/deal-pipeline', (req, res) => {
   const isAdmin = isAdminUser(userRecord);
   if (!isAdmin) return res.status(403).json({ error: 'Admin only' });
 
-  const { salesperson, customerName, homeModel, price, lender, dealStatus, month, homeType, notes } = req.body;
+  const { salesperson, customerName, homeModel, price, lender, dealStatus, month, homeType, notes, conditionsCleared } = req.body;
   if (!customerName || !customerName.trim()) return res.status(400).json({ error: 'customerName is required' });
 
   const deals = readDealPipeline();
@@ -2446,6 +2446,7 @@ app.post('/api/deal-pipeline', (req, res) => {
     month: (month || '').trim(),
     homeType: (homeType || '').trim(),
     notes: (notes || '').trim(),
+    conditionsCleared: conditionsCleared === true || conditionsCleared === 'true',
     createdBy: req.user.sub,
     createdByName: userRecord ? userRecord.name : '',
     createdAt: now,
@@ -2466,7 +2467,7 @@ app.put('/api/deal-pipeline/:id', (req, res) => {
   const idx = deals.findIndex((d) => d.id === req.params.id);
   if (idx === -1) return res.status(404).json({ error: 'Deal not found' });
 
-  const { salesperson, customerName, homeModel, price, lender, dealStatus, month, homeType, notes } = req.body;
+  const { salesperson, customerName, homeModel, price, lender, dealStatus, month, homeType, notes, conditionsCleared } = req.body;
   deals[idx] = {
     ...deals[idx],
     salesperson: salesperson !== undefined ? (salesperson || '').trim() : deals[idx].salesperson,
@@ -2478,6 +2479,7 @@ app.put('/api/deal-pipeline/:id', (req, res) => {
     month: month !== undefined ? (month || '').trim() : deals[idx].month,
     homeType: homeType !== undefined ? (homeType || '').trim() : deals[idx].homeType,
     notes: notes !== undefined ? (notes || '').trim() : deals[idx].notes,
+    conditionsCleared: conditionsCleared !== undefined ? (conditionsCleared === true || conditionsCleared === 'true') : (deals[idx].conditionsCleared || false),
     updatedAt: new Date().toISOString()
   };
   writeDealPipeline(deals);

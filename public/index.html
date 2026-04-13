@@ -217,6 +217,7 @@
                 <option>Unknown</option>
               </select>
               <button id="deal-pipeline-export-btn" style="font-size:0.85rem">⬇️ Export CSV</button>
+              <button id="deal-pipeline-print-btn" style="font-size:0.85rem">🖨️ Print</button>
               <button id="deal-pipeline-close-btn">✕ Close</button>
             </div>
           </div>
@@ -777,6 +778,13 @@
           <button type="button" id="permissions-cancel-btn">Cancel</button>
           <button type="button" id="permissions-save-btn" class="primary">Save Permissions</button>
         </menu>
+      </div>
+    </dialog>
+
+    <!-- Deal Detail Modal -->
+    <dialog id="deal-detail-modal">
+      <div style="min-width:540px;max-width:700px;max-height:90vh;overflow-y:auto">
+        <div id="deal-detail-content"></div>
       </div>
     </dialog>
 
