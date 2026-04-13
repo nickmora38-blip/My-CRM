@@ -3213,7 +3213,7 @@ async function loadDealPipeline() {
 function getDealPipelineRowColor(dealStatus) {
   const closed = ['Closed/Pending Delivery', 'Close Scheduled', 'Closing'];
   const nearClose = ['Pending Close', 'Pending Clear to Close', 'Pending Close Docs', 'Clear Conditions', 'Clear to Close'];
-  const inProgress = ['Pending Conditions', 'Pending Updated Approval', 'Pending Approvals', 'Pending Bank Option', 'Pending Land Gift Letter'];
+  const inProgress = ['Pending Conditions', 'Pending Updated Approval', 'Pending Approvals', 'Pending Bank Option', 'Pending Land Gift Letter', 'Pending 401K', 'Pending Updated Down Payment', 'Pending Appraisal', 'Pending BPO', 'Pending VOE and Home Spec'];
   if (closed.includes(dealStatus)) return 'pipeline-row-green';
   if (nearClose.includes(dealStatus)) return 'pipeline-row-yellow';
   if (inProgress.includes(dealStatus)) return 'pipeline-row-red';
