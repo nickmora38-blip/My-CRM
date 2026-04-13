@@ -27,6 +27,8 @@ api.interceptors.response.use(
 export const authAPI = {
   login: (data: { email: string; password: string }) => api.post('/auth/login', data),
   register: (data: { email: string; password: string; name: string }) => api.post('/auth/register', data),
+  forgotPassword: (data: { email: string }) => api.post('/auth/forgot-password', data),
+  resetPassword: (data: { token: string; password: string }) => api.post('/auth/reset-password', data),
 };
 
 export const leadsAPI = {
@@ -43,6 +45,13 @@ export const notificationsAPI = {
 
 export const adminAPI = {
   getUsers: () => api.get('/admin/users'),
+  createUser: (data: { name: string; email: string; password: string; role?: 'admin' | 'phc' }) =>
+    api.post('/admin/users', data),
+  updateUser: (id: string, data: { name?: string; role?: 'admin' | 'phc'; active?: boolean }) =>
+    api.put(`/admin/users/${id}`, data),
+  setPermissions: (id: string, pagePermissions: Record<string, boolean>) =>
+    api.put(`/admin/users/${id}/permissions`, { pagePermissions }),
+  deleteUser: (id: string) => api.delete(`/admin/users/${id}`),
 };
 
 export const tasksAPI = {
