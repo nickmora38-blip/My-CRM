@@ -18,7 +18,7 @@ mkdir -p "$BACKUP_DIR"
 
 # Create backup archive (exclude the backups subdirectory to avoid nesting)
 zip -r "$BACKUP_FILE" "$DATA_DIR" \
-  -x "*/backups/*" \
+  -x "$DATA_DIR/backups/*" \
   > /dev/null 2>&1
 
 if [ $? -eq 0 ]; then
