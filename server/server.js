@@ -8,6 +8,7 @@ const rateLimit = require('express-rate-limit');
 const nodemailer = require('nodemailer');
 const webpush = require('web-push');
 const twilio = require('twilio');
+const db = require('./db');
 
 // ─── Email transport (optional – configure via env vars) ──────────────────────
 // Set SMTP_HOST, SMTP_PORT, SMTP_USER, SMTP_PASS to enable real email delivery.
@@ -250,6 +251,83 @@ ensureDirectories();
 initializeDataFiles();
 seedDataFiles();
 
+// ─── PostgreSQL write-through cache ──────────────────────────────────────────
+// When DATABASE_URL is set the server loads data from PostgreSQL on startup
+// and keeps an in-memory cache.  Writes update the cache, JSON files, and
+// PostgreSQL so all three stay in sync.  Without DATABASE_URL the cache is
+// null and the existing JSON-only path is used unchanged.
+
+let _usersCache = null;   // { email: userObj } or null
+let _leadsCache = null;   // [ leadObj, ... ]  or null
+let _dbReady    = false;
+
+async function initDatabase() {
+  if (!db.isConfigured()) return;
+
+  console.log('[DB] Connecting to PostgreSQL …');
+  const schemaOk = await db.initializeSchema();
+  if (!schemaOk) {
+    console.error('[DB] Schema setup failed — falling back to JSON storage');
+    return;
+  }
+
+  // ── Load users ──────────────────────────────────────────────────────────
+  const dbUsers = await db.loadUsersFromDb();
+  if (dbUsers && Object.keys(dbUsers).length > 0) {
+    _usersCache = dbUsers;
+    console.log(`[DB] Loaded ${Object.keys(dbUsers).length} user(s) from database`);
+  } else {
+    // First run: seed DB from JSON files
+    const jsonUsers = readJson(USERS_FILE, {});
+    const seedUsers = Object.keys(jsonUsers).length > 0 ? jsonUsers : null;
+    if (seedUsers) {
+      _usersCache = seedUsers;
+      await db.saveUsersToDb(seedUsers).catch((e) =>
+        console.error('[DB] Failed to seed users:', e.message)
+      );
+      console.log(`[DB] Seeded ${Object.keys(seedUsers).length} user(s) from JSON to database`);
+    }
+  }
+
+  // ── Load leads ──────────────────────────────────────────────────────────
+  const dbLeads = await db.loadLeadsFromDb();
+  if (dbLeads && dbLeads.length > 0) {
+    _leadsCache = dbLeads;
+    console.log(`[DB] Loaded ${dbLeads.length} lead(s) from database`);
+  } else {
+    // First run: seed DB from JSON file
+    const jsonLeads = readJson(LEADS_FILE, []);
+    const flat = Array.isArray(jsonLeads) ? jsonLeads : [];
+    if (flat.length > 0) {
+      _leadsCache = flat;
+      await db.saveLeadsToDb(flat).catch((e) =>
+        console.error('[DB] Failed to seed leads:', e.message)
+      );
+      console.log(`[DB] Seeded ${flat.length} lead(s) from JSON to database`);
+    } else {
+      _leadsCache = [];
+    }
+  }
+
+  _dbReady = true;
+  console.log('[DB] Database ready');
+}
+
+/** Fire-and-forget async write to PostgreSQL (never blocks sync callers). */
+function dbWriteUsers(users) {
+  if (!_dbReady) return;
+  db.saveUsersToDb(users).catch((e) =>
+    console.error('[DB] Failed to persist users:', e.message)
+  );
+}
+
+function dbWriteLeads(leads) {
+  if (!_dbReady) return;
+  db.saveLeadsToDb(leads).catch((e) =>
+    console.error('[DB] Failed to persist leads:', e.message)
+  );
+}
+
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
@@ -310,6 +388,9 @@ function writeJson(filePath, data) {
 }
 
 function readUsers() {
+  // When PostgreSQL is initialised, use the in-memory cache.
+  if (_dbReady && _usersCache !== null) return _usersCache;
+
   const users = readJson(USERS_FILE, {});
   if (Object.keys(users).length === 0) {
     // Seed demo users
@@ -384,10 +465,17 @@ function readUsers() {
 }
 
 function writeUsers(users) {
+  // Update in-memory cache and write to JSON (existing behaviour)
+  _usersCache = users;
   writeJson(USERS_FILE, users);
+  // Async persist to PostgreSQL when configured
+  dbWriteUsers(users);
 }
 
 function readLeads() {
+  // When PostgreSQL is initialised, use the in-memory cache.
+  if (_dbReady && _leadsCache !== null) return _leadsCache;
+
   const raw = readJson(LEADS_FILE, null);
   // Migrate old {users:{}} format to flat leads array
   if (raw && raw.users && typeof raw.users === 'object' && !Array.isArray(raw)) {
@@ -424,7 +512,11 @@ function migrateLeadStatuses(leads) {
 }
 
 function writeLeads(leads) {
+  // Update in-memory cache and write to JSON (existing behaviour)
+  _leadsCache = leads;
   writeJson(LEADS_FILE, leads);
+  // Async persist to PostgreSQL when configured
+  dbWriteLeads(leads);
 }
 
 function readTemplates() {
@@ -2863,11 +2955,21 @@ app.use((err, req, res, next) => {
 
 // Only listen when this file is run directly (not when required for testing)
 if (require.main === module) {
-  app.listen(PORT, () => {
-    console.log(`✅ CRM server running on http://localhost:${PORT}`);
-    console.log(`📋 Environment: ${NODE_ENV}`);
-    console.log(`🔐 Auth: JWT (${JWT_SECRET === 'dev-only-secret-change-in-production' ? 'default secret' : 'custom secret'})`);
-    console.log(`📁 Data directory: ${DATA_DIR}`);
+  initDatabase().then(() => {
+    app.listen(PORT, () => {
+      console.log(`✅ CRM server running on http://localhost:${PORT}`);
+      console.log(`📋 Environment: ${NODE_ENV}`);
+      console.log(`🔐 Auth: JWT (${JWT_SECRET === 'dev-only-secret-change-in-production' ? 'default secret' : 'custom secret'})`);
+      console.log(`📁 Data directory: ${DATA_DIR}`);
+      if (db.isConfigured()) {
+        console.log('🗄️  Storage: PostgreSQL (write-through cache)');
+      } else {
+        console.log('📂 Storage: JSON files (set DATABASE_URL to use PostgreSQL)');
+      }
+    });
+  }).catch((err) => {
+    console.error('Fatal startup error:', err);
+    process.exit(1);
   });
 }
 
