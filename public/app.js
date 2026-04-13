@@ -3286,6 +3286,8 @@ function exportDealPipelineCsv() {
   ]);
   exportTableToCsv(headers, rows, 'deal-pipeline-april-2026.csv');
 }
+
+els.loginForm.addEventListener('submit', async (event) => {
   event.preventDefault();
   const fd = new FormData(els.loginForm);
   try {
