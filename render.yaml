@@ -2,8 +2,8 @@ services:
   - type: web
     name: my-crm
     runtime: node
-    buildCommand: cd client && npm install && npm run build && cd ..
-    startCommand: npm start
+    buildCommand: npm install
+    startCommand: node server.js
     envVars:
       - key: NODE_ENV
         value: production
@@ -11,22 +11,18 @@ services:
         value: /var/data
       - key: JWT_SECRET
         generateValue: true
-      # ── Web Push / PWA ─────────────────────────────────────────────────────
-      # Generate with: npx web-push generate-vapid-keys
       - key: VAPID_PUBLIC_KEY
-        sync: false   # set in Render dashboard
+        sync: false
       - key: VAPID_PRIVATE_KEY
-        sync: false   # set in Render dashboard
+        sync: false
       - key: VAPID_SUBJECT
-        value: mailto:admin@example.com  # change to your email
-      # ── Twilio SMS ──────────────────────────────────────────────────────────
+        value: mailto:admin@example.com
       - key: TWILIO_ACCOUNT_SID
-        sync: false   # set in Render dashboard
+        sync: false
       - key: TWILIO_AUTH_TOKEN
-        sync: false   # set in Render dashboard
+        sync: false
       - key: TWILIO_FROM_NUMBER
-        sync: false   # set in Render dashboard (E.164 format: +15551234567)
-      # ── SMTP Email (optional) ───────────────────────────────────────────────
+        sync: false
       - key: SMTP_HOST
         sync: false
       - key: SMTP_PORT
