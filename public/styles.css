@@ -1212,3 +1212,25 @@ code {
   font-size: 0.78rem;
   white-space: nowrap;
 }
+
+/* ── EMH Logo Watermark ─────────────────────────────────────────────────── */
+.emh-watermark {
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  z-index: 0;
+  background-image: url('/assets/emh-logo.png');
+  background-repeat: no-repeat;
+  background-position: center center;
+  background-size: 480px auto;
+  opacity: 0.06;
+}
+
+/* EMH logo in header */
+.emh-header-logo {
+  width: 32px;
+  height: 32px;
+  object-fit: contain;
+  border-radius: 6px;
+  flex-shrink: 0;
+}
