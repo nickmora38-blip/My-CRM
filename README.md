@@ -77,6 +77,27 @@ npm start
 | `PORT` | 3001 | Server port |
 | `JWT_SECRET` | dev-only-secret-change-in-production | JWT signing key (MUST change in production) |
 | `NODE_ENV` | development | Environment mode |
+| `DOCUSIGN_INTEGRATION_KEY` | *(unset)* | DocuSign OAuth integration key / client ID |
+| `DOCUSIGN_SECRET_KEY` | *(unset)* | DocuSign access token (or OAuth secret) |
+| `DOCUSIGN_ACCOUNT_ID` | *(unset)* | DocuSign account/API account ID |
+| `DOCUSIGN_BASE_URL` | `https://demo.docusign.net/restapi` | DocuSign REST API base URL (use `https://www.docusign.net/restapi` for production) |
+| `APP_URL` | `http://localhost:3001` | Base URL of this application (used for DocuSign return URLs) |
+
+## DocuSign Setup
+
+1. **Create a DocuSign Developer Account** at [https://developers.docusign.com](https://developers.docusign.com).
+2. **Create an Integration Key (App)** in the DocuSign Admin console under **Settings → Apps and Keys**.
+3. **Generate an Access Token** for testing via **User Settings → Generate Access Token** in the DocuSign sandbox.
+4. **Get your Account ID** from the DocuSign Admin dashboard or the REST API.
+5. **Set environment variables:**
+   ```bash
+   export DOCUSIGN_INTEGRATION_KEY=your-integration-key
+   export DOCUSIGN_SECRET_KEY=your-access-token
+   export DOCUSIGN_ACCOUNT_ID=your-account-id
+   ```
+6. **Using the DocuSign feature:** Submit a Dealer Application, then admin users can click **📋 View Apps** and **📤 Send for DocuSign** to create a signing envelope. The borrower receives a DocuSign signing invitation.
+
+> **Note:** When `DOCUSIGN_INTEGRATION_KEY`, `DOCUSIGN_SECRET_KEY`, and `DOCUSIGN_ACCOUNT_ID` are not set, the endpoint returns `503` gracefully.
 
 ## API Reference
 
