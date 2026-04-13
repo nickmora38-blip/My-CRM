@@ -2256,11 +2256,9 @@ async function initializeAuthedState() {
     state.user = me.user;
     const loaders = [loadLeads(), loadTemplates(), loadTasks(), loadContacts(), loadActiveCustomers(), loadSettings()];
     if (currentUserIsAdmin()) loaders.push(loadUsers());
-    // Use allSettled so a single failing loader doesn't log the user out
-    await Promise.allSettled(loaders);
+    await Promise.all(loaders);
     render();
   } catch (error) {
-    // Only clear auth state if /api/auth/me itself failed (expired/invalid token)
     state.token = '';
     state.user = null;
     localStorage.removeItem('crm_token');
@@ -3197,8 +3195,7 @@ els.loginForm.addEventListener('submit', async (event) => {
     localStorage.setItem('crm_token', state.token);
     const loaders = [loadLeads(), loadTemplates(), loadTasks(), loadContacts(), loadActiveCustomers(), loadSettings()];
     if (currentUserIsAdmin()) loaders.push(loadUsers());
-    // Use allSettled — a failing data loader must not strand the user on the login screen
-    await Promise.allSettled(loaders);
+    await Promise.all(loaders);
     nav('/');
   } catch (error) { alert(error.message); }
 });
@@ -3213,8 +3210,7 @@ els.registerForm.addEventListener('submit', async (event) => {
     localStorage.setItem('crm_token', state.token);
     const loaders = [loadLeads(), loadTemplates(), loadTasks(), loadContacts(), loadActiveCustomers(), loadSettings()];
     if (currentUserIsAdmin()) loaders.push(loadUsers());
-    // Use allSettled — a failing data loader must not strand the user on the login screen
-    await Promise.allSettled(loaders);
+    await Promise.all(loaders);
     nav('/');
   } catch (error) { alert(error.message); }
 });
