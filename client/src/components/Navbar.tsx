@@ -98,6 +98,18 @@ export default function Navbar() {
                 {link.label}
               </Link>
             ))}
+            {user?.role === 'admin' && (
+              <Link
+                to="/admin/users"
+                className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors duration-200 ${
+                  location.pathname.startsWith('/admin')
+                    ? 'bg-exclusive-red text-white'
+                    : 'text-gray-300 hover:text-white hover:bg-exclusive-black-card'
+                }`}
+              >
+                Users
+              </Link>
+            )}
           </div>
 
           <div className="flex items-center gap-2">
@@ -234,6 +246,19 @@ export default function Navbar() {
                 {link.label}
               </Link>
             ))}
+            {user?.role === 'admin' && (
+              <Link
+                to="/admin/users"
+                onClick={closeMobile}
+                className={`flex items-center px-4 py-3 rounded-lg text-sm font-medium transition-colors duration-200 ${
+                  location.pathname.startsWith('/admin')
+                    ? 'bg-exclusive-red text-white'
+                    : 'text-gray-300 hover:text-white hover:bg-exclusive-black-card'
+                }`}
+              >
+                Users
+              </Link>
+            )}
             <button
               onClick={() => { closeMobile(); handleLogout(); }}
               className="w-full text-left flex items-center px-4 py-3 rounded-lg text-sm font-medium text-gray-400 hover:text-exclusive-red hover:bg-exclusive-black-card transition-colors duration-200"
